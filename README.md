@@ -3,7 +3,8 @@
 A tool to help Jersey City and Hudson County homeowners see how their property taxes have
 changed, how that compares with their neighbors and nearby towns, and how tax abatements work.
 
-Status: **Phase 0 – data feasibility.** Only the data pipeline and quality checks exist so far.
+Status: **Phase 1 – data extraction.** State data pipeline, quality checks, and live billing-portal extraction
+for Jersey City, Hoboken and Union City.
 
 ## Data pipeline
 
@@ -30,6 +31,31 @@ python -m pytest tests
 ```
 
 `data/raw/` is not committed (large, re-downloadable).
+
+## Live billing portals (Jersey City, Hoboken, Union City)
+
+| Town | Portal | Client |
+|---|---|---|
+| Jersey City (0906) | HLS Systems Property Tax Inquiry (JSON API) | `pipeline/portals/hls.py` |
+| Hoboken (0905) | Edmunds WIPP (GWT-RPC) — its HLS page has no bill data | `pipeline/portals/wipp.py` |
+| Union City (0910) | Edmunds WIPP (GWT-RPC) | `pipeline/portals/wipp.py` |
+
+```
+P="python pipeline/extract_bills.py"            # SQLite store: data/portal/bills.sqlite
+$P index  --town union-city                     # 1. list every account (resumable)
+$P fetch  --town union-city                     # 2. fetch bills for pending accounts (resumable)
+$P status                                       # progress per town
+$P export --out data/portal/export              # accounts.csv, bills.csv, annual.csv
+python pipeline/validate_portal.py              # compare against the MOD-IV 2026 list
+```
+
+- Requests are sequential, 1 per second by default (`--interval`). Stop and re-run any time.
+- Every bill gets a `category`: `property_tax` (regular, added, omitted), `appeal_adjustment`
+  (tax court / county board / assessor), or `other` (payment bookkeeping, water/sewer, SID, hotel tax).
+  Only `property_tax` should be used for "what did this property pay".
+- Owner names and mailing addresses returned by the portals are dropped before storage.
+- If Edmunds redeploys WIPP, calls fail with `//EX`; refresh `PERMUTATION`/`POLICY` in `wipp.py`
+  from any request the page makes in a browser.
 
 ## Sources
 
