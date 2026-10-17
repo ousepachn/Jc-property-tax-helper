@@ -1,0 +1,40 @@
+{
+  "njogis_rows": 143305,
+  "njogis_matches_modiv_list_year": {
+    "2021": {
+      "joined": 134442,
+      "last_year_tax_equal": 0.0472,
+      "net_value_equal": 0.7445
+    },
+    "2022": {
+      "joined": 137522,
+      "last_year_tax_equal": 0.0537,
+      "net_value_equal": 0.8515
+    },
+    "2023": {
+      "joined": 138256,
+      "last_year_tax_equal": 0.0545,
+      "net_value_equal": 0.8751
+    },
+    "2024": {
+      "joined": 139006,
+      "last_year_tax_equal": 0.0558,
+      "net_value_equal": 0.9088
+    },
+    "2025": {
+      "joined": 143300,
+      "last_year_tax_equal": 1.0,
+      "net_value_equal": 1.0
+    },
+    "2026": {
+      "joined": 142948,
+      "last_year_tax_equal": 0.058,
+      "net_value_equal": 0.9036
+    }
+  },
+  "njogis_dates": {
+    "max_PCLLASTUPD": "2025-06-09",
+    "max_PCL_PBDATE": "2025-10-29"
+  },
+  "live_sample_found": 44
+}
