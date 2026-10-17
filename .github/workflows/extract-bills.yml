@@ -1,0 +1,102 @@
+name: Extract tax bills
+
+# Crawls the city billing portals a few hours at a time. Each run restores the crawler's
+# SQLite state from the Actions cache, continues where the previous run stopped, saves the
+# state again and uploads a CSV export. Once everything is fetched, runs finish in a minute
+# until accounts are older than REFRESH_DAYS, then they are fetched again (new quarterly bills).
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      max_minutes:
+        description: "Minutes of crawling per job before saving and stopping"
+        default: "320"
+
+permissions:
+  contents: read
+
+env:
+  REFRESH_DAYS: "80"
+  MIN_YEAR: "2019"
+
+jobs:
+  extract:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - portal: hls          # apps.hlssystems.com
+            towns: jersey-city
+          - portal: wipp         # wipp.edmundsassoc.com
+            towns: union-city hoboken
+    concurrency:
+      group: extract-${{ matrix.portal }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      DB: data/portal/${{ matrix.portal }}.sqlite
+      MAX_MINUTES: ${{ inputs.max_minutes || '320' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - name: Restore crawler state
+        uses: actions/cache/restore@v4
+        with:
+          path: data/portal/${{ matrix.portal }}.sqlite.gz
+          key: portal-${{ matrix.portal }}-${{ github.run_id }}
+          restore-keys: portal-${{ matrix.portal }}-
+
+      - name: Unpack state
+        run: |
+          mkdir -p data/portal
+          if [ -f "$DB.gz" ]; then gunzip -f "$DB.gz"; echo "Restored state"; else echo "No previous state, starting fresh"; fi
+
+      - name: Crawl
+        run: |
+          start=$(date +%s)
+          left() { echo $(( MAX_MINUTES - ($(date +%s) - start) / 60 )); }
+          for town in ${{ matrix.towns }}; do
+            [ "$(left)" -le 5 ] && break
+            python pipeline/extract_bills.py --db "$DB" index --town "$town" --max-minutes "$(left)"
+            [ "$(left)" -le 5 ] && break
+            python pipeline/extract_bills.py --db "$DB" fetch --town "$town" --retry-errors \
+              --refresh-days "$REFRESH_DAYS" --min-year "$MIN_YEAR" --max-minutes "$(left)"
+          done
+
+      - name: Pack state
+        if: always()
+        run: |
+          [ -f "$DB" ] || exit 0
+          sqlite3 "$DB" "PRAGMA wal_checkpoint(TRUNCATE); VACUUM;" || true
+          gzip -kf "$DB"
+
+      - name: Save crawler state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data/portal/${{ matrix.portal }}.sqlite.gz
+          key: portal-${{ matrix.portal }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Summary and export
+        if: always()
+        run: |
+          [ -f "$DB" ] || exit 0
+          { echo "### ${{ matrix.portal }}"; echo '```'; python pipeline/extract_bills.py --db "$DB" status; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          python pipeline/extract_bills.py --db "$DB" export --out "export/${{ matrix.portal }}"
+          gzip -f export/${{ matrix.portal }}/bills.csv
+
+      - name: Upload export
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: export-${{ matrix.portal }}
+          path: export/${{ matrix.portal }}
+          retention-days: 30
+          if-no-files-found: ignore

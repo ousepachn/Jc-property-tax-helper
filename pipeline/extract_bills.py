@@ -13,7 +13,8 @@ import argparse
 import csv
 import sqlite3
 import sys
-from datetime import datetime, timezone
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -48,6 +49,14 @@ def now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def deadline(max_minutes):
+    return time.monotonic() + max_minutes * 60 if max_minutes is not None else None
+
+
+def past(dl):
+    return dl is not None and time.monotonic() > dl
+
+
 def connect(path):
     path.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(path)
@@ -73,8 +82,13 @@ def cmd_index(db, args):
     else:
         accounts = portal.iter_accounts(start_page=int(cursor), max_pages=args.max_pages)
 
-    n, last_cursor = 0, cursor
+    n, last_cursor, stopped = 0, cursor, False
+    dl = deadline(args.max_minutes)
     for cur, acct in accounts:
+        if past(dl) and cur != last_cursor:
+            stopped = True
+            print(f"{town['name']}: time budget reached, stopping at cursor {str(cur).strip()}")
+            break
         db.execute(
             """INSERT INTO accounts (county_district, account_id, pin, property_location, property_class)
                VALUES (?,?,?,?,?)
@@ -88,7 +102,7 @@ def cmd_index(db, args):
             db.commit()
             last_cursor = cur
             print(f"{town['name']}: {n} accounts indexed (cursor {str(cur).strip() or 'start'})", flush=True)
-    complete = 0 if args.max_pages else 1
+    complete = 0 if (args.max_pages or stopped) else 1
     db.execute("INSERT OR REPLACE INTO index_progress VALUES (?,?,?,?)", (cd, str(last_cursor), complete, now()))
     db.commit()
     print(f"{town['name']}: done, {n} accounts this run, complete={bool(complete)}")
@@ -101,15 +115,24 @@ def cmd_fetch(db, args):
     cd = town["county_district"]
     portal = portal_for(args.town, PoliteSession(min_interval=args.interval))
     statuses = ("pending", "error") if args.retry_errors else ("pending",)
-    q = f"""SELECT account_id, pin, property_location, property_class FROM accounts
-            WHERE county_district=? AND status IN ({','.join('?' * len(statuses))}) ORDER BY rowid"""
+    cond = f"status IN ({','.join('?' * len(statuses))})"
     params = [cd, *statuses]
+    if args.refresh_days is not None:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=args.refresh_days)).isoformat(timespec="seconds")
+        cond = f"({cond} OR (status IN ('done','no_bills') AND fetched_at < ?))"
+        params.append(cutoff)
+    q = f"""SELECT account_id, pin, property_location, property_class FROM accounts
+            WHERE county_district=? AND {cond} ORDER BY fetched_at IS NOT NULL, fetched_at, rowid"""
     if args.limit:
         q += " LIMIT ?"
         params.append(args.limit)
     todo = db.execute(q, params).fetchall()
     print(f"{town['name']}: {len(todo)} accounts to fetch")
+    dl = deadline(args.max_minutes)
     for i, (account_id, pin, loc, cls) in enumerate(todo, 1):
+        if past(dl):
+            print(f"{town['name']}: time budget reached after {i - 1} accounts; re-run to continue")
+            break
         acct = Account(cd, account_id, pin, loc, cls or "")
         try:
             res = portal.fetch(acct)
@@ -120,11 +143,12 @@ def cmd_fetch(db, args):
             print(f"  {i}/{len(todo)} {pin} ERROR {e}", flush=True)
             continue
         a, ts = res.account, now()
+        bills = [b for b in res.bills if b.tax_year >= args.min_year]
         db.execute("DELETE FROM bills WHERE county_district=? AND account_id=?", (cd, account_id))
         db.executemany(
             "INSERT INTO bills VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             [(cd, b.account_id, b.pin, b.tax_year, b.quarter, b.due_date, b.kind, b.category, b.amount, b.source, ts)
-             for b in res.bills],
+             for b in bills],
         )
         db.execute(
             """UPDATE accounts SET pin=?, property_class=?, land_value=?, improvement_value=?, net_taxable=?,
@@ -185,6 +209,7 @@ def main(argv=None):
         p = sub.add_parser(name)
         p.add_argument("--town", required=True, choices=TOWNS)
         p.add_argument("--interval", type=float, default=1.0, help="seconds between requests")
+        p.add_argument("--max-minutes", type=float, help="stop cleanly after this many minutes")
         if name == "index":
             p.add_argument("--max-pages", type=int, help="stop after N pages (for pilots)")
             p.add_argument("--restart", action="store_true")
@@ -192,6 +217,8 @@ def main(argv=None):
         else:
             p.add_argument("--limit", type=int)
             p.add_argument("--retry-errors", action="store_true")
+            p.add_argument("--refresh-days", type=float, help="also re-fetch accounts fetched more than N days ago")
+            p.add_argument("--min-year", type=int, default=2019, help="drop bills for tax years before this")
     sub.add_parser("status")
     p = sub.add_parser("export")
     p.add_argument("--out", default="data/portal/export")
