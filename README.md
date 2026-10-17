@@ -75,8 +75,11 @@ python pipeline/validate_portal.py              # compare against the MOD-IV 202
 - Every run uploads an `export-hls` / `export-wipp` artifact (accounts.csv, annual.csv, bills.csv.gz),
   kept for 1 day to stay within private-repo artifact storage; the latest run always has one,
   and writes per-town progress to the run summary.
-- The state lives only in the Actions cache (not in the repo or a release). GitHub evicts caches
-  unused for 7 days, so if the schedule is paused for longer the crawl starts over.
+- The state is kept in two places: the Actions cache (fast, but GitHub evicts it after 7 days
+  unused) and the **`portal-data` release** (`hls.sqlite.gz`, `wipp.sqlite.gz`, `export-*.tar.gz`),
+  replaced after every run and never expiring. If the cache is gone, the next run restores from the
+  release. Download the latest database or CSVs any time from the repo's Releases page.
+  The release backup only runs while the repository is private.
 - **Owner data requires a private repository.** Each job checks the repo's visibility first. If it is
   private (and `include_owners` is on, the default), it runs with `--include-owners --keep-raw`;
   accounts fetched earlier without owners are backfilled. If the repo is public it collects no owner

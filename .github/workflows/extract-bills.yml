@@ -4,6 +4,10 @@ name: Extract tax bills
 # SQLite state from the Actions cache, continues where the previous run stopped, saves the
 # state again and uploads a CSV export. Once everything is fetched, runs finish in a minute
 # until accounts are older than REFRESH_DAYS, then they are fetched again (new quarterly bills).
+#
+# Durable copy: after every run the database and CSV export are also uploaded to the GitHub
+# Release "portal-data" (replacing the previous files). Release files never expire, so if the
+# cache is evicted (7 days unused) the next run restores from the release instead of starting over.
 on:
   schedule:
     - cron: "17 */6 * * *"
@@ -18,12 +22,13 @@ on:
         default: true
 
 permissions:
-  contents: read
+  contents: write   # create/update the portal-data release
   actions: read
 
 env:
   REFRESH_DAYS: "80"
   MIN_YEAR: "2019"
+  RELEASE_TAG: portal-data
 
 jobs:
   extract:
@@ -43,6 +48,7 @@ jobs:
     env:
       DB: data/portal/${{ matrix.portal }}.sqlite
       MAX_MINUTES: ${{ inputs.max_minutes || '320' }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -59,6 +65,7 @@ jobs:
           WANT_OWNERS: ${{ github.event_name == 'schedule' || inputs.include_owners }}
         run: |
           private=$(gh api "repos/${{ github.repository }}" --jq .private)
+          echo "REPO_PRIVATE=$private" >> "$GITHUB_ENV"
           if [ "$WANT_OWNERS" = "true" ] && [ "$private" = "true" ]; then
             echo "OWNER_FLAGS=--include-owners" >> "$GITHUB_ENV"
             echo "RAW_FLAGS=--keep-raw" >> "$GITHUB_ENV"
@@ -78,10 +85,17 @@ jobs:
           key: portal-${{ matrix.portal }}-${{ github.run_id }}
           restore-keys: portal-${{ matrix.portal }}-
 
-      - name: Unpack state
+      - name: Unpack state (cache, else release backup)
         run: |
           mkdir -p data/portal
-          if [ -f "$DB.gz" ]; then gunzip -f "$DB.gz"; echo "Restored state"; else echo "No previous state, starting fresh"; fi
+          if [ -f "$DB.gz" ]; then
+            echo "Restored state from the Actions cache"
+          elif gh release download "$RELEASE_TAG" --pattern "${{ matrix.portal }}.sqlite.gz" --dir data/portal 2>/dev/null; then
+            echo "Cache empty; restored state from release $RELEASE_TAG"
+          else
+            echo "No previous state, starting fresh"
+          fi
+          if [ -f "$DB.gz" ]; then gunzip -f "$DB.gz"; fi
 
       - name: Crawl
         run: |
@@ -117,6 +131,24 @@ jobs:
           redact=$([ -z "$OWNER_FLAGS" ] && echo --redact-owners || true)
           python pipeline/extract_bills.py --db "$DB" export --out "export/${{ matrix.portal }}" $redact
           gzip -f export/${{ matrix.portal }}/bills.csv
+
+      - name: Back up to release
+        if: always()
+        run: |
+          [ -f "$DB.gz" ] || exit 0
+          if [ "$REPO_PRIVATE" != "true" ]; then
+            echo "::warning::Repository is not private; skipping release backup (releases would be public)."
+            exit 0
+          fi
+          tar -czf "export-${{ matrix.portal }}.tar.gz" -C export "${{ matrix.portal }}"
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            # both jobs may try at once; whichever loses just uploads to the one that exists
+            gh release create "$RELEASE_TAG" --prerelease --title "Portal data (latest crawl state)" \
+              --notes "Updated by the Extract tax bills workflow after every run. *.sqlite.gz = full crawler database (owner fields and raw responses when collected); export-*.tar.gz = CSV export. Private: do not make public." \
+              || sleep 10
+          fi
+          gh release upload "$RELEASE_TAG" "$DB.gz" "export-${{ matrix.portal }}.tar.gz" --clobber
+          echo "Backed up to release $RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload export
         if: always()
