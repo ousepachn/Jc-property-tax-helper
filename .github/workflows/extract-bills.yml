@@ -124,5 +124,5 @@ jobs:
         with:
           name: export-${{ matrix.portal }}
           path: export/${{ matrix.portal }}
-          retention-days: 30
+          retention-days: 1
           if-no-files-found: ignore

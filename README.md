@@ -72,7 +72,8 @@ python pipeline/validate_portal.py              # compare against the MOD-IV 202
   Jersey City) completes over several runs.
 - After the first pass, accounts are re-fetched once they are more than 80 days old
   (`REFRESH_DAYS`), which picks up each new quarterly bill. Bills before tax year 2019 are not kept.
-- Every run uploads an `export-hls` / `export-wipp` artifact (accounts.csv, annual.csv, bills.csv.gz)
+- Every run uploads an `export-hls` / `export-wipp` artifact (accounts.csv, annual.csv, bills.csv.gz),
+  kept for 1 day to stay within private-repo artifact storage; the latest run always has one,
   and writes per-town progress to the run summary.
 - The state lives only in the Actions cache (not in the repo or a release). GitHub evicts caches
   unused for 7 days, so if the schedule is paused for longer the crawl starts over.
