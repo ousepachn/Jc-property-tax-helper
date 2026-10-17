@@ -1,7 +1,4 @@
-"""Normalized records produced by every billing-portal client.
-
-Owner names and mailing addresses are deliberately absent: clients must drop them.
-"""
+"""Normalized records produced by every billing-portal client."""
 from dataclasses import asdict, dataclass, field
 
 
@@ -28,6 +25,14 @@ class Account:
     improvement_value: float | None = None
     net_taxable: float | None = None
     status: str = "pending"       # pending | done | no_bills | error
+    # Owner/mailing fields are parsed when the portal shows them, but the crawler only stores
+    # them with --include-owners, and never for accounts flagged under Daniel's Law.
+    owner_name: str | None = None
+    mailing_address: str | None = None
+    mailing_address2: str | None = None
+    mailing_city_state: str | None = None
+    mailing_zip: str | None = None
+    daniels_law: bool | None = None
 
 
 PROPERTY_TAX_KINDS = {"tax", "added", "omitted"}
@@ -61,10 +66,14 @@ class Bill:
             self.category = categorize(self.kind)
 
 
+OWNER_FIELDS = ("owner_name", "mailing_address", "mailing_address2", "mailing_city_state", "mailing_zip")
+
+
 @dataclass
 class FetchResult:
     account: Account
     bills: list[Bill] = field(default_factory=list)
+    raw: str | None = None        # the portal's response body, as received
 
     def rows(self):
         return [asdict(b) for b in self.bills]

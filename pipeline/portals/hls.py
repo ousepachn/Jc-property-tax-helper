@@ -33,6 +33,18 @@ def _iso(mmddyyyy):
         return ""
 
 
+def _owner_fields(src, account):
+    """Copy owner/mailing fields from a list row or accountInquiryVM onto the account."""
+    def clean(k):
+        return (src.get(k) or "").strip() or None
+    account.owner_name = clean("OwnerName")
+    account.mailing_address = clean("Address")
+    account.mailing_address2 = clean("Address2")
+    account.mailing_city_state = clean("CityState")
+    account.mailing_zip = clean("PostalCode")
+    account.daniels_law = bool(src.get("DanielsLaw"))
+
+
 def account_from_list_row(row, county_district):
     pin = make_pin(
         county_district,
@@ -40,17 +52,20 @@ def account_from_list_row(row, county_district):
         pin_part(row["SortLot"], row.get("SortLotSuffix")),
         row.get("Qualifier"),
     )
-    return Account(
+    account = Account(
         county_district=county_district,
         account_id=str(row["AccountNumber"]),
         pin=pin,
         property_location=(row.get("PropertyLocation") or "").strip(),
         property_class=(row.get("Class") or "").strip(),
     )
+    _owner_fields(row, account)
+    return account
 
 
 def parse_details(vm, account, source):
-    """Turn an accountInquiryVM into bills. Payments and owner fields are ignored."""
+    """Turn an accountInquiryVM into bills (payments are skipped; they stay in the raw response)."""
+    _owner_fields(vm, account)
     account.land_value = vm.get("Land")
     account.improvement_value = vm.get("Improvement")
     account.net_taxable = vm.get("NetTaxable")
@@ -105,4 +120,4 @@ class HlsPortal:
         vm = r.json()["accountInquiryVM"]
         bills = parse_details(vm, account, self.source)
         account.status = "done" if bills else "no_bills"
-        return FetchResult(account, bills)
+        return FetchResult(account, bills, raw=r.text)

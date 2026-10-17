@@ -64,6 +64,25 @@ def test_parse_search_fixture():
     assert len({k for k, _ in rows}) == 20
 
 
+def _with_fake_strings(text):
+    """Replace the fixture's REDACTED strings with distinct fake values FAKE0, FAKE1, ..."""
+    i, j = text.find(',["'), text.rfind('"]')
+    table = json.loads(text[i + 1:j + 2])
+    n = iter(range(len(table)))
+    table = [f"FAKE{next(n)}" if s == "REDACTED" else s for s in table]
+    return text[:i + 1] + json.dumps(table) + text[j + 2:]
+
+
+def test_parse_account_owner_fields_by_position():
+    key = "  100        2               "
+    res = parse_account(_with_fake_strings((FIX / "wipp_0910_100_2.txt").read_text()), key, "0910", "wipp:0910")
+    a = res.account
+    assert a.owner_name and a.owner_name.startswith("FAKE")
+    assert a.mailing_address and a.mailing_address.startswith("FAKE") and a.mailing_address != a.owner_name
+    assert a.mailing_zip and a.mailing_zip.isdigit() and len(a.mailing_zip) == 5
+    assert res.raw is not None
+
+
 def test_parse_account_fixture():
     key = "  100        2               "
     res = parse_account((FIX / "wipp_0910_100_2.txt").read_text(), key, "0910", "wipp:0910")
@@ -87,11 +106,13 @@ def test_parse_account_fixture():
 def test_hls_list_row_to_account():
     row = {"AccountNumber": 138289, "SortBlock": "00301", "SortBlockSuffix": "    ", "SortLot": "00001",
            "SortLotSuffix": "  01", "Qualifier": "C0002      ", "PropertyLocation": "677 LIBERTY AVE.   ",
-           "Class": " 2 ", "OwnerName": "SHOULD NOT BE KEPT"}
+           "Class": " 2 ", "OwnerName": "DOE, JANE  ", "Address": "1 MAIN ST", "CityState": "JERSEY CITY, NJ",
+           "PostalCode": "07302", "DanielsLaw": False}
     a = account_from_list_row(row, "0906")
     assert a.pin == "0906_301_1.01_C0002"
     assert a.property_location == "677 LIBERTY AVE."
-    assert "SHOULD NOT" not in json.dumps(a.__dict__)
+    # parsed at the client; whether it is stored is the crawler's decision (--include-owners)
+    assert (a.owner_name, a.mailing_address, a.mailing_zip, a.daniels_law) == ("DOE, JANE", "1 MAIN ST", "07302", False)
 
 
 def test_hls_parse_details_fixture():

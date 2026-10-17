@@ -53,7 +53,11 @@ python pipeline/validate_portal.py              # compare against the MOD-IV 202
 - Every bill gets a `category`: `property_tax` (regular, added, omitted), `appeal_adjustment`
   (tax court / county board / assessor), or `other` (payment bookkeeping, water/sewer, SID, hotel tax).
   Only `property_tax` should be used for "what did this property pay".
-- Owner names and mailing addresses returned by the portals are dropped before storage.
+- Owner names and mailing addresses are stored only with `--include-owners` (on `index`/`fetch`), and
+  never for accounts the portal flags under Daniel's Law (N.J.S.A. 47:1B). `--keep-raw` also stores
+  each portal response zlib-compressed in `raw_responses` (print one with `raw --pin <pin>`), which
+  keeps payment history and full ledger history that the normalized `bills` table drops.
+  `export --redact-owners` leaves the owner columns out.
 - If Edmunds redeploys WIPP, calls fail with `//EX`; refresh `PERMUTATION`/`POLICY` in `wipp.py`
   from any request the page makes in a browser.
 
@@ -72,6 +76,10 @@ python pipeline/validate_portal.py              # compare against the MOD-IV 202
   and writes per-town progress to the run summary.
 - The state lives only in the Actions cache (not in the repo or a release). GitHub evicts caches
   unused for 7 days, so if the schedule is paused for longer the crawl starts over.
+- **Owner data requires a private repository.** Each job checks the repo's visibility first. If it is
+  private (and `include_owners` is on, the default), it runs with `--include-owners --keep-raw`;
+  accounts fetched earlier without owners are backfilled. If the repo is public it collects no owner
+  fields, exports with `--redact-owners`, and puts a warning in the run summary.
 
 ## Sources
 

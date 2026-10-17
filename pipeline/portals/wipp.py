@@ -6,8 +6,8 @@ The page is a GWT app that talks GWT-RPC to {ROOT}/wipp/wipp. We replay two call
 
 GWT-RPC responses are '//OK' + JSON array: [int payload..., [string table], flags, version].
 Bills are located by their shape in the payload (amount, Integer, year, month, day, Day, label)
-rather than by a full object schema, and checked against MOD-IV in validation.
-Owner/mailing strings in the string table are never read into records.
+rather than by a full object schema, and checked against MOD-IV in validation. Header fields
+(assessments, owner, mailing address) are read by position; see read_header().
 """
 import json
 import re
@@ -107,13 +107,18 @@ def _money(s):
     return int(s) if s.isdigit() else None
 
 
-def read_assessments(ints, strings, muni):
-    """(improvement, land, net) read positionally from the TaxAcct header.
+HEADER_FIELDS = 17
+
+
+def read_header(ints, strings, muni):
+    """Read the TaxAcct header fields positionally.
 
     GWT reads the payload from the end, so the account's leading fields sit just before the
-    municipality reference. Observed order (walking backwards from it): unknown, exempt value,
-    improvement, Day(as-of), land, Day(last payment), ArrayList, net taxable.
-    Returns None if the layout doesn't look like that.
+    municipality reference. Observed order (walking backwards from it):
+      0 unknown, 1 exempt value, 2 improvement, 3 Day(as-of), 4 land, 5 Day(last payment),
+      6 ArrayList, 7 net taxable, 8-10 blank, 11 (object), 12 mailing city/state, 13 owner name,
+      14 mailing address, 15 mailing address line 2, 16 mailing zip.
+    Returns a dict (improvement, land, net, owner_name, mailing_*) or None if the layout differs.
     """
     try:
         muni_ref = strings.index(muni) + 1
@@ -125,7 +130,7 @@ def read_assessments(ints, strings, muni):
     if p is None:
         return None
     fields, i = [], p - 1
-    while i >= 0 and len(fields) < 8:
+    while i >= 0 and len(fields) < HEADER_FIELDS:
         t = ints[i]
         if t == day_t:
             fields.append(("day", None))
@@ -140,6 +145,7 @@ def read_assessments(ints, strings, muni):
             i -= 1
     if len(fields) < 8:
         return None
+    fields += [("str", None)] * (HEADER_FIELDS - len(fields))
 
     def is_(n, kind):  # a null object is a single 0 token, read as ("str", None)
         return fields[n][0] == kind or fields[n] == ("str", None)
@@ -149,7 +155,16 @@ def read_assessments(ints, strings, muni):
     improvement, land, net = _money(fields[2][1]), _money(fields[4][1]), _money(fields[7][1])
     if None in (improvement, land, net) or improvement + land != net:
         return None
-    return improvement, land, net
+
+    def text(n):
+        v = fields[n][1] if fields[n][0] == "str" else None
+        return (v or "").strip() or None
+
+    return {
+        "improvement": improvement, "land": land, "net": net,
+        "mailing_city_state": text(12), "owner_name": text(13), "mailing_address": text(14),
+        "mailing_address2": text(15), "mailing_zip": text(16),
+    }
 
 
 def parse_account(text, key, county_district, source):
@@ -164,9 +179,11 @@ def parse_account(text, key, county_district, source):
     pin = make_pin(county_district, block, lot, qual)
     acct = Account(county_district=county_district, account_id=key, pin=pin)
 
-    values = read_assessments(ints, strings, county_district)
-    if values:
-        acct.improvement_value, acct.land_value, acct.net_taxable = values
+    header = read_header(ints, strings, county_district)
+    if header:
+        acct.improvement_value, acct.land_value, acct.net_taxable = header["improvement"], header["land"], header["net"]
+        for f in ("owner_name", "mailing_address", "mailing_address2", "mailing_city_state", "mailing_zip"):
+            setattr(acct, f, header[f])
     cls = [s.strip() for s in strings if re.fullmatch(r"\s?\d{1,2}[A-F]?\s?", s or "") and len(s) == 3]
     if cls:
         acct.property_class = cls[0]
@@ -185,7 +202,7 @@ def parse_account(text, key, county_district, source):
                 ))
     bills.sort(key=lambda b: b.due_date)
     acct.status = "done" if bills else "no_bills"
-    return FetchResult(acct, bills)
+    return FetchResult(acct, bills, raw=text)
 
 
 class WippPortal:
