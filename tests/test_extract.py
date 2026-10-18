@@ -33,12 +33,17 @@ class FakePortal:
         self.fetched.append(account.account_id)
         if account.account_id in self.fail:
             raise RuntimeError("boom")
-        bills = [Bill(account.pin, account.account_id, y, q, f"{y}-0{q}-01", "tax", 100.0)
+        return self.parse_raw(f"RAW {account.account_id}", account)
+
+    # account 3 owes its 2025 Q1 bill; everything else is paid
+    def parse_raw(self, raw, account):
+        bills = [Bill(account.pin, account.account_id, y, q, f"{y}-0{q}-01", "tax", 100.0,
+                      balance=100.0 if (account.account_id, y, q) == ("3", 2025, 1) else 0.0)
                  for y in (2018, 2025, 2026) for q in (1, 2)]
         account.net_taxable = 1000.0
         account.status = "done"
         self._owner(account)
-        return FetchResult(account, bills, raw=f"RAW {account.account_id}")
+        return FetchResult(account, bills, raw=raw)
 
 
 def run(tmp_path, monkeypatch, portal, *argv):
@@ -132,3 +137,38 @@ def test_owner_backfill_and_export_redaction(tmp_path, monkeypatch):
     assert "owner_name" not in header and "mailing_address" not in header
     run(tmp_path, monkeypatch, p, "export", "--out", str(tmp_path / "y"))
     assert "OWNER 1" in (tmp_path / "y" / "accounts.csv").read_text()
+
+
+def test_delinquency_columns_export_and_rederive(tmp_path, monkeypatch):
+    p = FakePortal(n=3)
+    run(tmp_path, monkeypatch, p, "index", "--town", "union-city")
+    db = run(tmp_path, monkeypatch, p, "fetch", "--town", "union-city", "--include-owners", "--keep-raw")
+    rows = {r[0]: r[1:] for r in db.execute(
+        "SELECT account_id, delinquency_level, past_due_amount, oldest_past_due FROM accounts")}
+    assert rows["3"] == ("1_quarter", 100.0, "2025-01-01")
+    assert rows["1"][0] == "current"
+
+    run(tmp_path, monkeypatch, p, "export", "--out", str(tmp_path / "x"))
+    delinquent = (tmp_path / "x" / "delinquent.csv").read_text().splitlines()
+    assert len(delinquent) == 2 and "0910_3_1" in delinquent[1]
+    assert (tmp_path / "x" / "delinquency_summary.csv").exists()
+
+    # wipe the derived columns, then rebuild them from stored raw responses without fetching
+    db.execute("UPDATE accounts SET delinquency_level=NULL, past_due_amount=NULL, parsed_version=0")
+    db.commit()
+    p.fetched.clear()
+    db = run(tmp_path, monkeypatch, p, "rederive", "--town", "union-city")
+    assert p.fetched == []
+    assert db.execute("SELECT delinquency_level FROM accounts WHERE account_id='3'").fetchone()[0] == "1_quarter"
+    # account 2 is Daniel's Law: no raw stored, so it keeps what fetch wrote (NULL after the wipe)
+    assert db.execute("SELECT delinquency_level FROM accounts WHERE account_id='2'").fetchone()[0] is None
+    assert db.execute("SELECT owner_name FROM accounts WHERE account_id='1'").fetchone()[0] == "OWNER 1"
+
+
+def test_recheck_delinquent_accounts(tmp_path, monkeypatch):
+    p = FakePortal(n=3)
+    run(tmp_path, monkeypatch, p, "index", "--town", "union-city")
+    run(tmp_path, monkeypatch, p, "fetch", "--town", "union-city")
+    p.fetched.clear()
+    run(tmp_path, monkeypatch, p, "fetch", "--town", "union-city", "--recheck-delinquent-days", "-1")
+    assert p.fetched == ["3"]

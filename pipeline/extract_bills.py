@@ -2,6 +2,7 @@
 
   python pipeline/extract_bills.py index  --town jersey-city            # list every account
   python pipeline/extract_bills.py fetch  --town jersey-city --limit 500 # fetch bills for pending accounts
+  python pipeline/extract_bills.py rederive --town jersey-city         # re-parse stored raw responses (no network)
   python pipeline/extract_bills.py status
   python pipeline/extract_bills.py export --out data/portal/export
 
@@ -24,7 +25,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from portals.http import PoliteSession  # noqa: E402
-from portals.models import OWNER_FIELDS  # noqa: E402
+from portals.models import OWNER_FIELDS, Account, delinquency_level, past_due  # noqa: E402
 from portals.registry import TOWNS, portal_for  # noqa: E402
 
 DEFAULT_DB = Path(__file__).resolve().parent.parent / "data" / "portal" / "bills.sqlite"
@@ -40,7 +41,8 @@ CREATE INDEX IF NOT EXISTS accounts_pin ON accounts(pin);
 CREATE INDEX IF NOT EXISTS accounts_status ON accounts(county_district, status);
 CREATE TABLE IF NOT EXISTS bills (
   county_district TEXT, account_id TEXT, pin TEXT, tax_year INTEGER, quarter INTEGER,
-  due_date TEXT, kind TEXT, category TEXT, amount REAL, source TEXT, fetched_at TEXT
+  due_date TEXT, kind TEXT, category TEXT, amount REAL, source TEXT, fetched_at TEXT,
+  balance REAL, interest REAL
 );
 CREATE INDEX IF NOT EXISTS bills_acct ON bills(county_district, account_id);
 CREATE INDEX IF NOT EXISTS bills_pin ON bills(pin, tax_year);
@@ -52,7 +54,18 @@ CREATE TABLE IF NOT EXISTS raw_responses (
   PRIMARY KEY (county_district, account_id)
 );
 """
-ADDED_ACCOUNT_COLUMNS = {f: "TEXT" for f in OWNER_FIELDS} | {"daniels_law": "INTEGER", "owners_collected": "INTEGER"}
+DELINQUENCY_COLUMNS = {
+    "portal_delinquent": "INTEGER", "pending_tax_sale": "INTEGER", "open_town_lien": "INTEGER",
+    "lien_count": "INTEGER", "lien_open_balance": "REAL", "redeemed_liens": "INTEGER", "total_due": "REAL", "past_due_amount": "REAL", "past_due_interest": "REAL",
+    "past_due_bills": "INTEGER", "oldest_past_due": "TEXT", "delinquency_level": "TEXT",
+}
+ADDED_ACCOUNT_COLUMNS = ({f: "TEXT" for f in OWNER_FIELDS} | {"daniels_law": "INTEGER", "owners_collected": "INTEGER"}
+                         | DELINQUENCY_COLUMNS | {"parsed_version": "INTEGER"})
+ADDED_BILL_COLUMNS = {"balance": "REAL", "interest": "REAL"}
+BILL_COLUMNS = ("county_district", "account_id", "pin", "tax_year", "quarter", "due_date", "kind", "category",
+                "amount", "source", "fetched_at", "balance", "interest")
+# Bump when parsers change what they extract; `rederive` re-parses stored raw responses below this.
+PARSER_VERSION = 3
 
 
 def now():
@@ -71,12 +84,41 @@ def connect(path):
     path.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(path)
     db.executescript(SCHEMA)
-    have = {r[1] for r in db.execute("PRAGMA table_info(accounts)")}
-    for col, typ in ADDED_ACCOUNT_COLUMNS.items():
-        if col not in have:
-            db.execute(f"ALTER TABLE accounts ADD COLUMN {col} {typ}")
+    for table, added in (("accounts", ADDED_ACCOUNT_COLUMNS), ("bills", ADDED_BILL_COLUMNS)):
+        have = {r[1] for r in db.execute(f"PRAGMA table_info({table})")}
+        for col, typ in added.items():
+            if col not in have:
+                db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
     db.commit()
     return db
+
+
+def store_result(db, cd, account_id, res, ts, min_year, owners=None, owners_collected=None):
+    """Write one parsed account + its bills. owners=None leaves stored owner fields untouched."""
+    a = res.account
+    bills = [b for b in res.bills if b.tax_year >= min_year]
+    db.execute("DELETE FROM bills WHERE county_district=? AND account_id=?", (cd, account_id))
+    db.executemany(
+        f"INSERT INTO bills ({', '.join(BILL_COLUMNS)}) VALUES ({','.join('?' * len(BILL_COLUMNS))})",
+        [(cd, b.account_id, b.pin, b.tax_year, b.quarter, b.due_date, b.kind, b.category, b.amount, b.source,
+          ts, b.balance, b.interest) for b in bills],
+    )
+    # as of the moment the portal answered; bills from before min_year still count toward delinquency
+    pd_ = past_due(res.bills, datetime.fromisoformat(ts).date())
+    level = delinquency_level(pd_["past_due_bills"], a.lien_count, a.pending_tax_sale)
+    sets = {
+        "pin": a.pin, "property_class": a.property_class, "land_value": a.land_value,
+        "improvement_value": a.improvement_value, "net_taxable": a.net_taxable, "status": a.status,
+        "error": None, "fetched_at": ts, "daniels_law": a.daniels_law, "parsed_version": PARSER_VERSION,
+        "portal_delinquent": a.portal_delinquent, "pending_tax_sale": a.pending_tax_sale,
+        "open_town_lien": a.open_town_lien, "lien_count": a.lien_count, "lien_open_balance": a.lien_open_balance,
+        "redeemed_liens": a.redeemed_liens, "total_due": a.total_due,
+        **pd_, "delinquency_level": level,
+    }
+    if owners is not None:
+        sets.update(dict(zip(OWNER_FIELDS, owners)), owners_collected=owners_collected)
+    db.execute(f"UPDATE accounts SET {', '.join(f'{k}=?' for k in sets)} WHERE county_district=? AND account_id=?",
+               (*sets.values(), cd, account_id))
 
 
 def owner_values(acct, include_owners):
@@ -135,8 +177,6 @@ def cmd_index(db, args):
 
 
 def cmd_fetch(db, args):
-    from portals.models import Account
-
     town = TOWNS[args.town]
     cd = town["county_district"]
     portal = portal_for(args.town, PoliteSession(min_interval=args.interval))
@@ -150,6 +190,11 @@ def cmd_fetch(db, args):
     if args.include_owners:
         # backfill accounts fetched earlier without owner collection
         cond = f"({cond} OR (status IN ('done','no_bills') AND COALESCE(owners_collected, 0) = 0))"
+    if args.recheck_delinquent_days is not None:
+        # re-check delinquent accounts more often than the general refresh
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=args.recheck_delinquent_days)).isoformat(timespec="seconds")
+        cond = f"({cond} OR (COALESCE(delinquency_level, 'current') != 'current' AND fetched_at < ?))"
+        params.append(cutoff)
     q = f"""SELECT account_id, pin, property_location, property_class FROM accounts
             WHERE county_district=? AND {cond} ORDER BY fetched_at IS NOT NULL, fetched_at, rowid"""
     if args.limit:
@@ -172,22 +217,8 @@ def cmd_fetch(db, args):
             print(f"  {i}/{len(todo)} {pin} ERROR {e}", flush=True)
             continue
         a, ts = res.account, now()
-        bills = [b for b in res.bills if b.tax_year >= args.min_year]
-        db.execute("DELETE FROM bills WHERE county_district=? AND account_id=?", (cd, account_id))
-        db.executemany(
-            "INSERT INTO bills VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            [(cd, b.account_id, b.pin, b.tax_year, b.quarter, b.due_date, b.kind, b.category, b.amount, b.source, ts)
-             for b in bills],
-        )
-        owners = owner_values(a, args.include_owners)
-        db.execute(
-            f"""UPDATE accounts SET pin=?, property_class=?, land_value=?, improvement_value=?, net_taxable=?,
-               status=?, error=NULL, fetched_at=?, daniels_law=?, owners_collected=?,
-               {', '.join(f'{f}=?' for f in OWNER_FIELDS)}
-               WHERE county_district=? AND account_id=?""",
-            (a.pin, a.property_class, a.land_value, a.improvement_value, a.net_taxable, a.status, ts,
-             a.daniels_law, int(args.include_owners), *owners, cd, account_id),
-        )
+        store_result(db, cd, account_id, res, ts, args.min_year,
+                     owners=owner_values(a, args.include_owners), owners_collected=int(args.include_owners))
         if a.daniels_law:
             db.execute("DELETE FROM raw_responses WHERE county_district=? AND account_id=?", (cd, account_id))
         elif args.keep_raw and args.include_owners and res.raw is not None:
@@ -196,6 +227,36 @@ def cmd_fetch(db, args):
         db.commit()
         if i % 25 == 0 or i == len(todo):
             print(f"  {i}/{len(todo)} fetched ({portal.http.requests_made} requests)", flush=True)
+
+
+def cmd_rederive(db, args):
+    """Re-parse stored raw responses with the current parsers. No network; owner fields untouched."""
+    town = TOWNS[args.town]
+    cd = town["county_district"]
+    portal = portal_for(args.town, None)
+    cond = "" if args.all else "AND COALESCE(a.parsed_version, 0) < ?"
+    params = [cd] + ([] if args.all else [PARSER_VERSION])
+    rows = db.execute(
+        f"""SELECT a.account_id, a.pin, a.property_location, a.property_class, r.fetched_at, r.body
+            FROM accounts a JOIN raw_responses r USING (county_district, account_id)
+            WHERE a.county_district=? {cond}""", params).fetchall()
+    print(f"{town['name']}: {len(rows)} stored responses to re-parse")
+    dl = deadline(args.max_minutes)
+    for i, (account_id, pin, loc, cls, fetched_at, body) in enumerate(rows, 1):
+        if past(dl):
+            print(f"{town['name']}: time budget reached after {i - 1}; re-run to continue")
+            break
+        try:
+            res = portal.parse_raw(zlib.decompress(body).decode("utf-8"), Account(cd, account_id, pin, loc, cls or ""))
+        except Exception as e:  # a response the current parser can't read: leave the row as it was
+            print(f"  {pin}: could not re-parse ({e})")
+            continue
+        store_result(db, cd, account_id, res, fetched_at, args.min_year)
+        if i % 2000 == 0:
+            db.commit()
+            print(f"  {i}/{len(rows)} re-parsed", flush=True)
+    db.commit()
+    print(f"{town['name']}: re-parse done")
 
 
 def cmd_status(db, args):
@@ -208,6 +269,13 @@ def cmd_status(db, args):
         idx = "complete" if prog and prog[0] else ("partial" if prog else "-")
         print(f"{slug:<12} {sum(counts.values()):>8} {counts.get('done', 0):>7} {counts.get('no_bills', 0):>8} "
               f"{counts.get('pending', 0):>8} {counts.get('error', 0):>6} {nb:>9}  {idx}")
+    print("\ndelinquency (as of each account's last fetch; 'unknown' = fetched before balances were parsed)")
+    for slug, t in TOWNS.items():
+        rows = db.execute("""SELECT COALESCE(delinquency_level, 'unknown'), COUNT(*), ROUND(SUM(past_due_amount), 0)
+                             FROM accounts WHERE county_district=? AND status IN ('done','no_bills')
+                             GROUP BY 1 ORDER BY 1""", (t["county_district"],)).fetchall()
+        if rows:
+            print(f"  {slug:<12} " + ", ".join(f"{lvl}: {n:,}" + (f" (${amt:,.0f})" if amt else "") for lvl, n, amt in rows))
 
 
 def cmd_export(db, args):
@@ -239,7 +307,30 @@ def cmd_export(db, args):
         w = csv.writer(fh)
         w.writerow(cols)
         w.writerows(cur)
-    print(f"exported accounts.csv, bills.csv, annual.csv to {out}")
+    # Delinquent accounts, largest past-due amount first
+    cols = [r[1] for r in db.execute("PRAGMA table_info(accounts)")]
+    keep = ["county_district", "pin", "property_location", "property_class", "net_taxable",
+            *([] if args.redact_owners else list(OWNER_FIELDS)), "daniels_law", *DELINQUENCY_COLUMNS, "fetched_at"]
+    keep = [c for c in keep if c in cols]
+    cur = db.execute(f"""SELECT {', '.join(keep)} FROM accounts
+                         WHERE COALESCE(delinquency_level, 'current') NOT IN ('current')
+                         ORDER BY COALESCE(past_due_amount, 0) + COALESCE(lien_open_balance, 0) DESC""")
+    with open(out / "delinquent.csv", "w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(keep)
+        w.writerows(cur)
+    cur = db.execute("""SELECT county_district, COALESCE(delinquency_level, 'unknown') AS level, COUNT(*) AS accounts,
+                               ROUND(SUM(past_due_amount), 2) AS past_due_amount,
+                               ROUND(SUM(past_due_interest), 2) AS past_due_interest,
+                               ROUND(SUM(lien_open_balance), 2) AS lien_open_balance,
+                               MIN(fetched_at) AS oldest_check, MAX(fetched_at) AS newest_check
+                        FROM accounts WHERE status IN ('done','no_bills')
+                        GROUP BY 1, 2 ORDER BY 1, 2""")
+    with open(out / "delinquency_summary.csv", "w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow([c[0] for c in cur.description])
+        w.writerows(cur)
+    print(f"exported accounts.csv, bills.csv, annual.csv, delinquent.csv, delinquency_summary.csv to {out}")
 
 
 def cmd_raw(db, args):
@@ -273,6 +364,13 @@ def main(argv=None):
             p.add_argument("--min-year", type=int, default=2019, help="drop bills for tax years before this")
             p.add_argument("--keep-raw", action="store_true",
                            help="also store each raw portal response, compressed (requires --include-owners)")
+            p.add_argument("--recheck-delinquent-days", type=float,
+                           help="also re-fetch delinquent accounts last checked more than N days ago")
+    p = sub.add_parser("rederive", help="re-parse stored raw responses with the current parsers (no network)")
+    p.add_argument("--town", required=True, choices=TOWNS)
+    p.add_argument("--all", action="store_true", help="re-parse every stored response, not only outdated ones")
+    p.add_argument("--min-year", type=int, default=2019)
+    p.add_argument("--max-minutes", type=float)
     sub.add_parser("status")
     p = sub.add_parser("export")
     p.add_argument("--out", default="data/portal/export")
@@ -283,8 +381,8 @@ def main(argv=None):
     if getattr(args, "keep_raw", False) and not args.include_owners:
         ap.error("--keep-raw contains owner data; use it together with --include-owners")
     db = connect(args.db)
-    {"index": cmd_index, "fetch": cmd_fetch, "status": cmd_status, "export": cmd_export,
-     "raw": cmd_raw}[args.cmd](db, args)
+    {"index": cmd_index, "fetch": cmd_fetch, "rederive": cmd_rederive, "status": cmd_status,
+     "export": cmd_export, "raw": cmd_raw}[args.cmd](db, args)
 
 
 if __name__ == "__main__":

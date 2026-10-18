@@ -126,3 +126,54 @@ def test_hls_parse_details_fixture():
     q26 = {b.quarter: b.amount for b in bills if b.tax_year == 2026 and b.kind == "tax"}
     assert q26 == {1: 3037.84, 2: 3037.83, 3: 3852.26, 4: 3899.10}
     assert all(b.amount != 0 for b in bills)
+
+
+# --- Delinquency -----------------------------------------------------------------
+
+def test_past_due_respects_grace_period_and_categories():
+    from datetime import date
+    from portals.models import Bill, past_due
+
+    bills = [
+        Bill("p", "a", 2026, 3, "2026-08-01", "tax", 1000.0, balance=1000.0, interest=40.0),
+        Bill("p", "a", 2026, 4, "2026-11-01", "tax", 1000.0, balance=1000.0),       # not yet due
+        Bill("p", "a", 2026, 2, "2026-05-01", "tax", 1000.0, balance=0.0),          # paid
+        Bill("p", "a", 2026, 3, "2026-08-01", "water", 50.0, balance=50.0),          # not property tax
+    ]
+    assert past_due(bills, date(2026, 10, 18)) == {
+        "past_due_amount": 1000.0, "past_due_interest": 40.0, "past_due_bills": 1, "oldest_past_due": "2026-08-01"}
+    assert past_due(bills, date(2026, 11, 5))["past_due_bills"] == 1        # inside the 10-day grace
+    assert past_due(bills, date(2026, 11, 12))["past_due_bills"] == 2
+
+
+def test_delinquency_level():
+    from portals.models import delinquency_level
+    assert delinquency_level(0) == "current"
+    assert delinquency_level(1) == "1_quarter"
+    assert delinquency_level(3) == "2_3_quarters"
+    assert delinquency_level(5) == "4plus_quarters"
+    assert delinquency_level(0, lien_count=1) == "lien"
+    assert delinquency_level(0, pending_tax_sale=True) == "lien"
+
+
+def test_hls_balances_and_flags():
+    vm = json.loads((FIX / "hls_jc_313_new_york.json").read_text())["accountInquiryVM"]
+    acct = Account("0906", "98624", "0906_2306_46")
+    bills = parse_details(vm, acct, "hls:JerseyCity")
+    q = {(b.tax_year, b.quarter): b for b in bills if b.kind == "tax"}
+    assert q[(2026, 4)].balance == 3899.10          # due Nov 1, unpaid when fetched
+    assert q[(2026, 3)].balance == 0.0
+    assert acct.portal_delinquent is False and acct.pending_tax_sale is False
+    # its 2025 tax-sale certificate was redeemed: history, not an open lien
+    assert (acct.lien_count, acct.redeemed_liens, acct.lien_open_balance) == (0, 1, 0)
+
+
+def test_wipp_balances_from_fixture():
+    res = parse_account((FIX / "wipp_0910_100_2.txt").read_text(), "  100        2               ", "0910", "wipp:0910")
+    taxes = [b for b in res.bills if b.kind == "tax"]
+    assert all(b.balance is not None and b.balance >= 0 for b in taxes)
+    # everything due before the fixture was recorded (Oct 2026) and past grace is paid
+    from datetime import date
+    from portals.models import past_due
+    assert past_due(res.bills, date(2026, 10, 18))["past_due_bills"] == 0
+    assert sum(b.balance for b in taxes if b.due_date >= "2026-11-01") > 0

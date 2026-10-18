@@ -4,6 +4,7 @@ JSON endpoints used by the public Property Tax Inquiry page:
   GET {base}/PropertyTaxInquiry/GetAccounts?page=N&searchType=Account&searchField=   (10 accounts/page)
   GET {base}/PropertyTaxInquiry/GetAccountDetails?accountNumber=N&interestThruDate=...
 """
+import json
 import re
 import time
 from datetime import datetime
@@ -70,20 +71,33 @@ def parse_details(vm, account, source):
     account.improvement_value = vm.get("Improvement")
     account.net_taxable = vm.get("NetTaxable")
     account.property_class = (vm.get("Class") or account.property_class or "").strip()
+    account.portal_delinquent = bool(vm.get("DelinquentStatus"))
+    account.pending_tax_sale = bool(vm.get("PendingTaxsale"))
+    account.open_town_lien = bool(vm.get("OpenTownLien"))
+    # LienCount also counts redeemed liens, so classify each certificate instead
+    liens = vm.get("AccountLiens") or []
+    open_liens = [lien for lien in liens if (lien.get("OpenBalance") or 0) > 0
+                  or (lien.get("Status") or "").strip().lower() not in ("redeemed", "cancelled", "canceled")]
+    account.lien_count = len(open_liens)
+    account.lien_open_balance = round(sum(lien.get("OpenBalance") or 0 for lien in open_liens), 2)
+    account.redeemed_liens = len(liens) - len(open_liens)
+    account.total_due = vm.get("TotalDue")
     bills = []
     for t in vm.get("Details") or []:
         billed, adjusted = t.get("Billed") or 0.0, t.get("Adjusted") or 0.0
         if not billed and not adjusted:
             continue
         kind = _kind(t.get("Description") or "")
-        amount = billed
+        amount, balance, interest = billed, t.get("Balance"), t.get("Interest")
         if adjusted and not billed:
-            kind, amount = f"{kind}_adjustment", adjusted
+            kind, amount, balance, interest = f"{kind}_adjustment", adjusted, None, None
         bills.append(Bill(
             pin=account.pin, account_id=account.account_id, tax_year=int(t["TaxYear"]),
             quarter=int(t["Quarter"]) if t.get("Quarter") else None,
             due_date=_iso(t.get("DueDepositDate") or t.get("TransactionDate") or ""),
             kind=kind, amount=round(amount, 2), source=source,
+            balance=None if balance is None else round(balance, 2),
+            interest=None if interest is None else round(interest, 2),
         ))
     return bills
 
@@ -117,7 +131,11 @@ class HlsPortal:
             "accountNumber": account.account_id,
             "interestThruDate": time.strftime("%a %b %d %Y"),
         })
-        vm = r.json()["accountInquiryVM"]
+        return self.parse_raw(r.text, account)
+
+    def parse_raw(self, raw, account):
+        """Parse a stored GetAccountDetails response (no network)."""
+        vm = json.loads(raw)["accountInquiryVM"]
         bills = parse_details(vm, account, self.source)
         account.status = "done" if bills else "no_bills"
-        return FetchResult(account, bills, raw=r.text)
+        return FetchResult(account, bills, raw=raw)

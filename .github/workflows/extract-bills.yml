@@ -27,6 +27,7 @@ permissions:
 
 env:
   REFRESH_DAYS: "80"
+  RECHECK_DELINQUENT_DAYS: "7"   # delinquent accounts are re-fetched weekly
   MIN_YEAR: "2019"
   RELEASE_TAG: portal-data
 
@@ -103,10 +104,14 @@ jobs:
           left() { echo $(( MAX_MINUTES - ($(date +%s) - start) / 60 )); }
           for town in ${{ matrix.towns }}; do
             [ "$(left)" -le 5 ] && break
+            # re-parse stored responses when the parsers changed (no network; only outdated rows)
+            python pipeline/extract_bills.py --db "$DB" rederive --town "$town" --min-year "$MIN_YEAR" --max-minutes "$(left)"
+            [ "$(left)" -le 5 ] && break
             python pipeline/extract_bills.py --db "$DB" index --town "$town" --max-minutes "$(left)" $OWNER_FLAGS
             [ "$(left)" -le 5 ] && break
             python pipeline/extract_bills.py --db "$DB" fetch --town "$town" --retry-errors \
-              --refresh-days "$REFRESH_DAYS" --min-year "$MIN_YEAR" --max-minutes "$(left)" $OWNER_FLAGS $RAW_FLAGS
+              --refresh-days "$REFRESH_DAYS" --recheck-delinquent-days "$RECHECK_DELINQUENT_DAYS" \
+              --min-year "$MIN_YEAR" --max-minutes "$(left)" $OWNER_FLAGS $RAW_FLAGS
           done
 
       - name: Pack state

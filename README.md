@@ -58,6 +58,20 @@ python pipeline/validate_portal.py              # compare against the MOD-IV 202
   each portal response zlib-compressed in `raw_responses` (print one with `raw --pin <pin>`), which
   keeps payment history and full ledger history that the normalized `bills` table drops.
   `export --redact-owners` leaves the owner columns out.
+- **Delinquency.** Each fetch also records, per account: `past_due_amount`, `past_due_bills`,
+  `oldest_past_due`, `past_due_interest`, `total_due`, open tax-sale liens (`lien_count`,
+  `lien_open_balance`), `redeemed_liens` (history) and the portal's own flags (`portal_delinquent`,
+  `pending_tax_sale`, Jersey City only), summarized as `delinquency_level`:
+  `current` / `1_quarter` / `2_3_quarters` / `4plus_quarters` / `lien`.
+  A bill counts as past due when it still has a balance more than 10 days after its due date
+  (N.J.S.A. 54:4-67 grace period), as of the moment the account was fetched (`fetched_at`).
+  Bills before `--min-year` are not stored but still count. A property whose lien was bought by an
+  investor shows $0 owed to the city; its debt is the lien's open balance. WIPP portals (Hoboken,
+  Union City) report balances but not liens, and their interest field reads 0 (interest is
+  computed on their page), so `past_due_interest` is only meaningful for Jersey City.
+  `export` writes `delinquent.csv` (largest first) and `delinquency_summary.csv`.
+- `rederive --town T` re-parses stored raw responses with the current parsers (no network), e.g.
+  after a parser change; the workflow runs it automatically before fetching.
 - If Edmunds redeploys WIPP, calls fail with `//EX`; refresh `PERMUTATION`/`POLICY` in `wipp.py`
   from any request the page makes in a browser.
 
@@ -71,7 +85,8 @@ python pipeline/validate_portal.py              # compare against the MOD-IV 202
   (default 320), then saves the state back to the cache, so the full first pass (~1 day for
   Jersey City) completes over several runs.
 - After the first pass, accounts are re-fetched once they are more than 80 days old
-  (`REFRESH_DAYS`), which picks up each new quarterly bill. Bills before tax year 2019 are not kept.
+  (`REFRESH_DAYS`), which picks up each new quarterly bill; delinquent accounts are re-checked
+  weekly (`RECHECK_DELINQUENT_DAYS`). Bills before tax year 2019 are not kept.
 - Every run uploads an `export-hls` / `export-wipp` artifact (accounts.csv, annual.csv, bills.csv.gz),
   kept for 1 day to stay within private-repo artifact storage; the latest run always has one,
   and writes per-town progress to the run summary.

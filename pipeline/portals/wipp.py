@@ -167,6 +167,24 @@ def read_header(ints, strings, muni):
     }
 
 
+def _bill_slots(ints, b, int_t, n=3):
+    """Read the n Integer-or-reference fields just left of the billed amount at ints[b].
+
+    Observed layout (forward order): ..., slot3, slot2(balance), slot1(interest), billed, Integer, Y, M, D, Day.
+    A slot is either (value, Integer-type) or a single negative back-reference. Back-references
+    only occur for values GWT shares between objects, which in practice is Integer 0, so they read as 0.
+    """
+    slots, j = [], b - 1
+    for _ in range(n):
+        if j >= 1 and ints[j] == int_t:
+            slots.append(ints[j - 1])
+            j -= 2
+        else:
+            slots.append(0)
+            j -= 1
+    return slots
+
+
 def parse_account(text, key, county_district, source):
     ints, strings = parse_response(text)
     try:
@@ -195,12 +213,16 @@ def parse_account(text, key, county_district, source):
             if t == int_t and dt == day_t and 2000 <= y <= 2100 and 1 <= m <= 12 and 1 <= d <= 31 and 0 < label <= len(strings):
                 year_label = strings[label - 1].strip()
                 tax_year = int(year_label) if year_label.isdigit() else y
+                interest, balance, _ = _bill_slots(ints, i, int_t)
                 bills.append(Bill(
                     pin=pin, account_id=acct.account_id, tax_year=tax_year,
                     quarter=DUE_MONTH_TO_QUARTER.get(m), due_date=f"{y:04d}-{m:02d}-{d:02d}",
-                    kind="tax", amount=amount / 100, source=source,
+                    # negative rows are credits/refunds (e.g. appeal judgments), not bills
+                    kind="tax" if amount >= 0 else "credit", amount=amount / 100, source=source,
+                    balance=balance / 100, interest=interest / 100,
                 ))
     bills.sort(key=lambda b: b.due_date)
+    acct.total_due = round(sum((b.balance or 0) + (b.interest or 0) for b in bills if b.amount > 0), 2)
     acct.status = "done" if bills else "no_bills"
     return FetchResult(acct, bills, raw=text)
 
@@ -241,7 +263,10 @@ class WippPortal:
 
     def fetch(self, account):
         key = account.account_id   # raw, space-padded 29-char block/lot/qualifier key
-        res = parse_account(self._call("getTaxAcct", [("S", self.wippid), ("S", key)]),
-                            key, self.county_district, self.source)
+        return self.parse_raw(self._call("getTaxAcct", [("S", self.wippid), ("S", key)]), account)
+
+    def parse_raw(self, raw, account):
+        """Parse a stored getTaxAcct response (no network)."""
+        res = parse_account(raw, account.account_id, self.county_district, self.source)
         res.account.property_location = account.property_location
         return res
