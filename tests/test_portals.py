@@ -177,3 +177,17 @@ def test_wipp_balances_from_fixture():
     from portals.models import past_due
     assert past_due(res.bills, date(2026, 10, 18))["past_due_bills"] == 0
     assert sum(b.balance for b in taxes if b.due_date >= "2026-11-01") > 0
+
+
+def test_wipp_lien_flags_and_details():
+    key = "  194       47               "
+    res = parse_account((FIX / "wipp_0905_194_47_lien.txt").read_text(), key, "0905", "wipp:0905")
+    a = res.account
+    assert a.pin == "0905_194_47" and a.property_class == "1" and a.net_taxable == 1900
+    assert a.lien_count == 1 and a.pending_tax_sale is False and a.bankruptcy is False
+    (lien,) = a.liens
+    assert (lien["certificate"], lien["sale_date"], lien["sale_amount"], lien["subsequent_charges"]) == \
+        ("003212", "1985-10-30", 35.19, 1808.07)
+    assert a.lien_open_balance == 1843.26
+    from portals.models import delinquency_level
+    assert delinquency_level(0, a.lien_count, a.pending_tax_sale) == "lien"

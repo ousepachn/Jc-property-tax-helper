@@ -163,6 +163,11 @@ def test_delinquency_columns_export_and_rederive(tmp_path, monkeypatch):
     # account 2 is Daniel's Law: no raw stored, so it keeps what fetch wrote (NULL after the wipe)
     assert db.execute("SELECT delinquency_level FROM accounts WHERE account_id='2'").fetchone()[0] is None
     assert db.execute("SELECT owner_name FROM accounts WHERE account_id='1'").fetchone()[0] == "OWNER 1"
+    # rederive also fills owner fields an older parser missed (raw only exists when owners were collected)
+    db.execute("UPDATE accounts SET owner_name=NULL, parsed_version=0 WHERE account_id='1'")
+    db.commit()
+    db = run(tmp_path, monkeypatch, p, "rederive", "--town", "union-city")
+    assert db.execute("SELECT owner_name FROM accounts WHERE account_id='1'").fetchone()[0] == "OWNER 1"
 
 
 def test_recheck_delinquent_accounts(tmp_path, monkeypatch):

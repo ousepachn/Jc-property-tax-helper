@@ -15,6 +15,7 @@ is lost; raw responses are kept only together with --include-owners, since they 
 """
 import argparse
 import csv
+import json
 import sqlite3
 import sys
 import time
@@ -58,6 +59,7 @@ DELINQUENCY_COLUMNS = {
     "portal_delinquent": "INTEGER", "pending_tax_sale": "INTEGER", "open_town_lien": "INTEGER",
     "lien_count": "INTEGER", "lien_open_balance": "REAL", "redeemed_liens": "INTEGER", "total_due": "REAL", "past_due_amount": "REAL", "past_due_interest": "REAL",
     "past_due_bills": "INTEGER", "oldest_past_due": "TEXT", "delinquency_level": "TEXT",
+    "bankruptcy": "INTEGER", "liens_json": "TEXT",
 }
 ADDED_ACCOUNT_COLUMNS = ({f: "TEXT" for f in OWNER_FIELDS} | {"daniels_law": "INTEGER", "owners_collected": "INTEGER"}
                          | DELINQUENCY_COLUMNS | {"parsed_version": "INTEGER"})
@@ -65,7 +67,7 @@ ADDED_BILL_COLUMNS = {"balance": "REAL", "interest": "REAL"}
 BILL_COLUMNS = ("county_district", "account_id", "pin", "tax_year", "quarter", "due_date", "kind", "category",
                 "amount", "source", "fetched_at", "balance", "interest")
 # Bump when parsers change what they extract; `rederive` re-parses stored raw responses below this.
-PARSER_VERSION = 3
+PARSER_VERSION = 4
 
 
 def now():
@@ -112,7 +114,8 @@ def store_result(db, cd, account_id, res, ts, min_year, owners=None, owners_coll
         "error": None, "fetched_at": ts, "daniels_law": a.daniels_law, "parsed_version": PARSER_VERSION,
         "portal_delinquent": a.portal_delinquent, "pending_tax_sale": a.pending_tax_sale,
         "open_town_lien": a.open_town_lien, "lien_count": a.lien_count, "lien_open_balance": a.lien_open_balance,
-        "redeemed_liens": a.redeemed_liens, "total_due": a.total_due,
+        "redeemed_liens": a.redeemed_liens, "total_due": a.total_due, "bankruptcy": a.bankruptcy,
+        "liens_json": json.dumps(a.liens) if a.liens else None,
         **pd_, "delinquency_level": level,
     }
     if owners is not None:
@@ -230,7 +233,7 @@ def cmd_fetch(db, args):
 
 
 def cmd_rederive(db, args):
-    """Re-parse stored raw responses with the current parsers. No network; owner fields untouched."""
+    """Re-parse stored raw responses with the current parsers. No network."""
     town = TOWNS[args.town]
     cd = town["county_district"]
     portal = portal_for(args.town, None)
@@ -251,7 +254,11 @@ def cmd_rederive(db, args):
         except Exception as e:  # a response the current parser can't read: leave the row as it was
             print(f"  {pin}: could not re-parse ({e})")
             continue
-        store_result(db, cd, account_id, res, fetched_at, args.min_year)
+        # raw responses are only stored when owner collection was on (never for Daniel's Law
+        # accounts), so owner fields can be refreshed from them too
+        a = res.account
+        store_result(db, cd, account_id, res, fetched_at, args.min_year,
+                     owners=owner_values(a, True), owners_collected=1)
         if i % 2000 == 0:
             db.commit()
             print(f"  {i}/{len(rows)} re-parsed", flush=True)

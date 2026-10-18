@@ -5,9 +5,8 @@ The page is a GWT app that talks GWT-RPC to {ROOT}/wipp/wipp. We replay two call
   getTaxAcct(muni, key)                    -> one account with assessments and quarterly bills
 
 GWT-RPC responses are '//OK' + JSON array: [int payload..., [string table], flags, version].
-Bills are located by their shape in the payload (amount, Integer, year, month, day, Day, label)
-rather than by a full object schema, and checked against MOD-IV in validation. Header fields
-(assessments, owner, mailing address) are read by position; see read_header().
+They are decoded with GwtReader using the field layouts in SCHEMAS (taken from the app's own
+JavaScript), and checked against MOD-IV in validation.
 """
 import json
 import re
@@ -104,123 +103,133 @@ def parse_search(text):
 
 def _money(s):
     s = (s or "").strip().replace(",", "")
-    return int(s) if s.isdigit() else None
+    return int(s) if s.lstrip("-").isdigit() else None
 
 
-HEADER_FIELDS = 17
+def _text(s):
+    return (s or "").strip() or None
 
 
-def read_header(ints, strings, muni):
-    """Read the TaxAcct header fields positionally.
+# Field layouts of the GWT classes that can appear in a getTaxAcct response, in the order the
+# client reads them. Extracted from the deployed WIPP JavaScript (each class's FieldSerializer):
+# (obfuscated field name, kind). Field meanings below come from how the page renders them.
+SCHEMAS = {
+    'TaxAcct': [('a', 'string'), ('b', 'string'), ('c', 'string'), ('d', 'string'), ('e', 'prim'), ('f', 'string'), ('g', 'object'), ('i', 'string'), ('j', 'prim'), ('k', 'string'), ('n', 'string'), ('o', 'object'), ('p', 'string'), ('q', 'object'), ('r', 'object'), ('s', 'string'), ('t', 'string'), ('u', 'string'), ('v', 'string'), ('w', 'prim'), ('A', 'string'), ('B', 'string'), ('C', 'string'), ('D', 'string'), ('F', 'string'), ('G', 'string'), ('H', 'string'), ('I', 'string'), ('J', 'long'), ('K', 'prim'), ('L', 'prim'), ('M', 'object'), ('N', 'object'), ('O', 'string'), ('P', 'string'), ('Q', 'string'), ('R', 'string'), ('S', 'prim'), ('T', 'prim'), ('U', 'prim'), ('V', 'object'), ('W', 'prim'), ('X', 'prim')],
+    'LienAcct': [('a', 'string'), ('b', 'string'), ('c', 'string'), ('d', 'prim'), ('e', 'string'), ('f', 'string'), ('g', 'prim'), ('i', 'prim'), ('j', 'prim'), ('k', 'prim'), ('n', 'object'), ('o', 'prim'), ('p', 'string')],
+    'SpAssmtAcct': [('a', 'string'), ('b', 'string'), ('c', 'string'), ('d', 'prim'), ('e', 'string'), ('f', 'object'), ('g', 'prim'), ('i', 'object'), ('j', 'prim'), ('k', 'object'), ('n', 'prim'), ('o', 'prim'), ('p', 'string'), ('q', 'prim'), ('r', 'prim'), ('s', 'prim')],
+    'SpChargesAcct': [('a', 'string'), ('b', 'prim'), ('c', 'string'), ('d', 'string'), ('e', 'string'), ('f', 'prim'), ('g', 'prim'), ('i', 'prim'), ('j', 'prim'), ('k', 'prim'), ('n', 'object'), ('o', 'object'), ('p', 'prim'), ('q', 'prim')],
+    'Day': [('a', 'prim'), ('b', 'prim'), ('c', 'prim')],
+}
 
-    GWT reads the payload from the end, so the account's leading fields sit just before the
-    municipality reference. Observed order (walking backwards from it):
-      0 unknown, 1 exempt value, 2 improvement, 3 Day(as-of), 4 land, 5 Day(last payment),
-      6 ArrayList, 7 net taxable, 8-10 blank, 11 (object), 12 mailing city/state, 13 owner name,
-      14 mailing address, 15 mailing address line 2, 16 mailing zip.
-    Returns a dict (improvement, land, net, owner_name, mailing_*) or None if the layout differs.
-    """
-    try:
-        muni_ref = strings.index(muni) + 1
-        day_t = next(i for i, s in enumerate(strings, 1) if s.startswith("wipp.client.Day/"))
-        list_t = strings.index("java.util.ArrayList/4159755760") + 1
-    except (ValueError, StopIteration):
-        return None
-    p = next((i for i in range(len(ints) - 1) if ints[i] == muni_ref and ints[i + 1] in (-8, 0)), None)
-    if p is None:
-        return None
-    fields, i = [], p - 1
-    while i >= 0 and len(fields) < HEADER_FIELDS:
-        t = ints[i]
-        if t == day_t:
-            fields.append(("day", None))
-            i -= 4
-        elif t == list_t:
-            if ints[i - 1] != 0:
-                return None
-            fields.append(("list", None))
-            i -= 2
+
+class GwtReader:
+    """Minimal GWT-RPC v7 object-stream reader for the classes in SCHEMAS."""
+
+    def __init__(self, ints, strings):
+        self.stream, self.pos, self.strings, self.seen = list(reversed(ints)), 0, strings, []
+
+    def int(self):
+        self.pos += 1
+        return self.stream[self.pos - 1]
+
+    def string(self):
+        i = self.int()
+        return self.strings[i - 1] if i > 0 else None
+
+    def object(self):
+        token = self.int()
+        if token == 0:
+            return None
+        if token < 0:
+            return self.seen[-token - 1]
+        sig = self.strings[token - 1]
+        name = sig.split("/")[0].rsplit(".", 1)[-1]
+        idx = len(self.seen)
+        self.seen.append(None)
+        if name == "ArrayList":
+            obj = []
+            self.seen[idx] = obj
+            obj.extend(self.object() for _ in range(self.int()))
+        elif name in ("Integer", "Long", "Short", "Byte", "Character", "Boolean"):
+            obj = self.int()
+        elif name == "String":
+            obj = self.string()
+        elif name in SCHEMAS:
+            obj = {"_type": name}
+            self.seen[idx] = obj
+            for field, kind in SCHEMAS[name]:
+                obj[field] = self.string() if kind == "string" else self.object() if kind == "object" else self.int()
         else:
-            fields.append(("str", strings[t - 1] if 0 < t <= len(strings) else None))
-            i -= 1
-    if len(fields) < 8:
+            raise WippError(f"unknown GWT type in response: {sig}")
+        self.seen[idx] = obj
+        return obj
+
+
+def _day(d):
+    """Day objects are (day, month, year); 1000-01-01 is the portal's 'no date'."""
+    if not d or d.get("c", 0) < 1900:
         return None
-    fields += [("str", None)] * (HEADER_FIELDS - len(fields))
-
-    def is_(n, kind):  # a null object is a single 0 token, read as ("str", None)
-        return fields[n][0] == kind or fields[n] == ("str", None)
-
-    if not (is_(3, "day") and is_(5, "day") and is_(6, "list")):
-        return None
-    improvement, land, net = _money(fields[2][1]), _money(fields[4][1]), _money(fields[7][1])
-    if None in (improvement, land, net) or improvement + land != net:
-        return None
-
-    def text(n):
-        v = fields[n][1] if fields[n][0] == "str" else None
-        return (v or "").strip() or None
-
-    return {
-        "improvement": improvement, "land": land, "net": net,
-        "mailing_city_state": text(12), "owner_name": text(13), "mailing_address": text(14),
-        "mailing_address2": text(15), "mailing_zip": text(16),
-    }
+    return f"{d['c']:04d}-{d['b']:02d}-{d['a']:02d}"
 
 
-def _bill_slots(ints, b, int_t, n=3):
-    """Read the n Integer-or-reference fields just left of the billed amount at ints[b].
+def _cents(v):
+    return None if v is None else v / 100
 
-    Observed layout (forward order): ..., slot3, slot2(balance), slot1(interest), billed, Integer, Y, M, D, Day.
-    A slot is either (value, Integer-type) or a single negative back-reference. Back-references
-    only occur for values GWT shares between objects, which in practice is Integer 0, so they read as 0.
-    """
-    slots, j = [], b - 1
-    for _ in range(n):
-        if j >= 1 and ints[j] == int_t:
-            slots.append(ints[j - 1])
-            j -= 2
-        else:
-            slots.append(0)
-            j -= 1
-    return slots
+
+def read_tax_acct(text):
+    ints, strings = parse_response(text)
+    acct = GwtReader(ints, strings).object()
+    if not isinstance(acct, dict) or acct.get("_type") != "TaxAcct":
+        raise WippError("response is not a TaxAcct")
+    return acct
 
 
 def parse_account(text, key, county_district, source):
-    ints, strings = parse_response(text)
-    try:
-        int_t = strings.index("java.lang.Integer/3438268394") + 1
-        day_t = next(i for i, s in enumerate(strings, 1) if s.startswith("wipp.client.Day/"))
-    except (ValueError, StopIteration):
-        int_t = day_t = None
+    """Parse a getTaxAcct response.
 
+    TaxAcct fields used (see SCHEMAS): e bankruptcy flag ('Y'), g bills by year, k exempt value,
+    n improvement, p land, s net taxable, r liens (LienAcct list), A mailing city/state, B owner,
+    C/D mailing address lines, F mailing zip, H property class, K lien flag ('L'),
+    U tax-sale flag ('Y'). Each bill row is a 9-element list:
+    [year label, due Day, billed, interest, balance, ?, type, Day, ?] with amounts in cents.
+    """
+    t = read_tax_acct(text)
     block, lot, qual = parse_key(key)
     pin = make_pin(county_district, block, lot, qual)
     acct = Account(county_district=county_district, account_id=key, pin=pin)
 
-    header = read_header(ints, strings, county_district)
-    if header:
-        acct.improvement_value, acct.land_value, acct.net_taxable = header["improvement"], header["land"], header["net"]
-        for f in ("owner_name", "mailing_address", "mailing_address2", "mailing_city_state", "mailing_zip"):
-            setattr(acct, f, header[f])
-    cls = [s.strip() for s in strings if re.fullmatch(r"\s?\d{1,2}[A-F]?\s?", s or "") and len(s) == 3]
-    if cls:
-        acct.property_class = cls[0]
+    acct.improvement_value, acct.land_value, acct.net_taxable = _money(t["n"]), _money(t["p"]), _money(t["s"])
+    acct.property_class = (t.get("H") or "").strip()
+    acct.owner_name, acct.mailing_city_state = _text(t["B"]), _text(t["A"])
+    acct.mailing_address, acct.mailing_address2, acct.mailing_zip = _text(t["C"]), _text(t["D"]), _text(t["F"])
+    acct.bankruptcy = t["e"] == ord("Y")
+    acct.pending_tax_sale = t["U"] == ord("Y")
+    liens = [lien for lien in (t["r"] or []) if isinstance(lien, dict)]
+    acct.liens = [{
+        "certificate": _text(lien["b"]), "sale_date": _day(lien["n"]), "holder": _text(lien["e"]),
+        "sale_amount": _cents(lien["k"]), "subsequent_charges": _cents(lien["o"]),
+    } for lien in liens]
+    acct.lien_count = len(liens) or (1 if t["K"] == ord("L") else 0)
+    acct.lien_open_balance = round(sum((x["sale_amount"] or 0) + (x["subsequent_charges"] or 0)
+                                       for x in acct.liens), 2) if liens else None
 
     bills = []
-    if int_t and day_t:
-        for i in range(len(ints) - 7):
-            amount, t, y, m, d, dt, label = ints[i:i + 7]
-            if t == int_t and dt == day_t and 2000 <= y <= 2100 and 1 <= m <= 12 and 1 <= d <= 31 and 0 < label <= len(strings):
-                year_label = strings[label - 1].strip()
-                tax_year = int(year_label) if year_label.isdigit() else y
-                interest, balance, _ = _bill_slots(ints, i, int_t)
-                bills.append(Bill(
-                    pin=pin, account_id=acct.account_id, tax_year=tax_year,
-                    quarter=DUE_MONTH_TO_QUARTER.get(m), due_date=f"{y:04d}-{m:02d}-{d:02d}",
-                    # negative rows are credits/refunds (e.g. appeal judgments), not bills
-                    kind="tax" if amount >= 0 else "credit", amount=amount / 100, source=source,
-                    balance=balance / 100, interest=interest / 100,
-                ))
+    for year in t["g"] or []:
+        for row in year or []:
+            if not isinstance(row, list) or len(row) < 5 or not row[1]:
+                continue
+            label, due, billed, interest, balance = row[:5]
+            due_date = _day(due)
+            if due_date is None or billed is None:
+                continue
+            tax_year = int(label) if (label or "").strip().isdigit() else int(due_date[:4])
+            bills.append(Bill(
+                pin=pin, account_id=key, tax_year=tax_year,
+                quarter=DUE_MONTH_TO_QUARTER.get(int(due_date[5:7])), due_date=due_date,
+                # negative rows are credits/refunds (e.g. appeal judgments), not bills
+                kind="tax" if billed >= 0 else "credit", amount=billed / 100, source=source,
+                balance=_cents(balance or 0), interest=_cents(interest or 0),
+            ))
     bills.sort(key=lambda b: b.due_date)
     acct.total_due = round(sum((b.balance or 0) + (b.interest or 0) for b in bills if b.amount > 0), 2)
     acct.status = "done" if bills else "no_bills"

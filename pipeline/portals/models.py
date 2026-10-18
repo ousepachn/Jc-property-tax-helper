@@ -43,6 +43,8 @@ class Account:
     lien_open_balance: float | None = None
     redeemed_liens: int | None = None      # past liens since paid off; history, not current delinquency
     total_due: float | None = None
+    bankruptcy: bool | None = None
+    liens: list | None = None               # open liens: certificate, sale_date, holder, amounts
 
 
 PROPERTY_TAX_KINDS = {"tax", "added", "omitted"}

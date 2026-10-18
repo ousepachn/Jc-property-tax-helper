@@ -70,6 +70,14 @@ python pipeline/validate_portal.py              # compare against the MOD-IV 202
   Union City) report balances but not liens, and their interest field reads 0 (interest is
   computed on their page), so `past_due_interest` is only meaningful for Jersey City.
   `export` writes `delinquent.csv` (largest first) and `delinquency_summary.csv`.
+- WIPP responses are decoded with a GWT object-stream reader using field layouts taken from the
+  app's own JavaScript (`SCHEMAS` in `wipp.py`); besides bills, owner and assessments this gives
+  open tax-sale liens (certificate, sale date, holder, sale amount, subsequent charges), the
+  "in tax sale" flag and the bankruptcy flag. Liens are stored in `liens_json`.
+- `analyze_delinquency.py` turns an export into delinquency analytics for one town: owner type
+  (`owners.py`: owner-occupied, individual investor, mom-and-pop LLC, corporate, trust/estate,
+  public/nonprofit) x property type (condo, single-family, 2-4 family, apartments, commercial, land)
+  x severity, with existing liens. Owner names only appear in its `delinquent_properties.csv`.
 - `rederive --town T` re-parses stored raw responses with the current parsers (no network), e.g.
   after a parser change; the workflow runs it automatically before fetching.
 - If Edmunds redeploys WIPP, calls fail with `//EX`; refresh `PERMUTATION`/`POLICY` in `wipp.py`

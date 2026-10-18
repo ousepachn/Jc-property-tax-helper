@@ -79,6 +79,12 @@ def parse_details(vm, account, source):
     open_liens = [lien for lien in liens if (lien.get("OpenBalance") or 0) > 0
                   or (lien.get("Status") or "").strip().lower() not in ("redeemed", "cancelled", "canceled")]
     account.lien_count = len(open_liens)
+    account.liens = [{
+        "certificate": (lien.get("CertificateNumber") or "").strip() or None,
+        "sale_date": _iso(lien.get("TaxsaleDate") or ""), "holder": (lien.get("LienHolderName") or "").strip() or None,
+        "sale_amount": lien.get("CertificateAmount"), "subsequent_charges": lien.get("SubsequentCharges"),
+        "open_balance": lien.get("OpenBalance"), "type": lien.get("Type"), "tax_year": lien.get("TaxYear"),
+    } for lien in open_liens]
     account.lien_open_balance = round(sum(lien.get("OpenBalance") or 0 for lien in open_liens), 2)
     account.redeemed_liens = len(liens) - len(open_liens)
     account.total_due = vm.get("TotalDue")
