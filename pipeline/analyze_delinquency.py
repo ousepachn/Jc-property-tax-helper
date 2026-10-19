@@ -33,12 +33,16 @@ SEVERITY_ORDER = ["current", "1_quarter", "2_3_quarters", "4plus_quarters", "lie
 OWNER_ORDER = ["owner_occupied", "individual_investor", "small_llc", "corporate", "trust_estate",
                "public_nonprofit", "unknown"]
 PROPERTY_ORDER = ["condo", "single_family", "two_to_four_family", "home_units_unknown", "apartment_5plus", "commercial",
-                  "vacant_land", "exempt", "other"]
+                  "vacant_land", "exempt", "no_class_on_file", "other"]
+RECENT_LIEN_YEARS = 5   # liens sold within this many years count as recent; older ones are legacy city-held liens
 
 
 def property_type(pin, prop_class, dwellings):
     cls = (prop_class or "").strip().upper()
     qualifier = pin.split("_")[3] if pin.count("_") >= 3 else ""
+    if not cls:
+        # billed accounts with no class or assessment (not on the MOD-IV list): typically abatement/PILOT billing
+        return "no_class_on_file"
     if cls.startswith("15"):
         return "exempt"
     if cls == "1":
@@ -55,6 +59,15 @@ def property_type(pin, prop_class, dwellings):
         # class 2 is residential with at most 4 units, so 2+ dwellings means a 2-4 family house
         return "two_to_four_family" if dwellings and dwellings >= 2 else "home_units_unknown"
     return "other"
+
+
+def newest_lien_year(liens_json):
+    try:
+        years = [int(str(x.get("sale_date") or "")[:4]) for x in json.loads(liens_json or "[]")
+                 if str(x.get("sale_date") or "")[:4].isdigit()]
+    except (ValueError, TypeError, AttributeError):
+        return 0
+    return max(years, default=0)
 
 
 def load_dwellings(modiv_csv, county_district):
@@ -83,6 +96,9 @@ def analyze(accounts, dwellings):
         a[col] = pd.to_numeric(a.get(col), errors="coerce").fillna(0)
     a["severity"] = a.delinquency_level.fillna("").replace("", "unknown")
     a["has_lien"] = a.lien_count > 0
+    a["newest_lien_year"] = [newest_lien_year(j) for j in a.get("liens_json", pd.Series([""] * len(a)))]
+    newest = pd.to_datetime(a.fetched_at, errors="coerce", utc=True).dt.year.max()
+    a["has_recent_lien"] = a.has_lien & (a.newest_lien_year >= (newest or 0) - RECENT_LIEN_YEARS)
     a["tax_sale"] = a.get("pending_tax_sale", pd.Series(dtype=str)).astype(str).isin(["1", "1.0", "True", "true"])
     a["in_bankruptcy"] = a.get("bankruptcy", pd.Series(dtype=str)).astype(str).isin(["1", "1.0", "True", "true"])
     a["delinquent"] = a.severity.isin(SEVERITY_ORDER[1:])
@@ -97,10 +113,11 @@ def group_table(a, key, order):
         "accounts": g.size(),
         "delinquent": g.delinquent.sum(),
         "with_open_lien": g.has_lien.sum(),
+        "with_recent_lien": g.has_recent_lien.sum(),
         "past_due_$": g.past_due_amount.sum().round(0),
         "lien_open_balance_$": g.lien_open_balance.sum().round(0),
     })
-    for col in ("accounts", "delinquent", "with_open_lien"):
+    for col in ("accounts", "delinquent", "with_open_lien", "with_recent_lien"):
         t[col] = t[col].astype(int)
     t["delinquency_rate_%"] = (t.delinquent / t.accounts * 100).round(2)
     t["share_of_delinquent_%"] = (t.delinquent / max(1, t.delinquent.sum()) * 100).round(1)
@@ -110,8 +127,12 @@ def group_table(a, key, order):
 def to_markdown(df, index_label):
     cols = [index_label, *df.columns]
     lines = ["| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
-    for idx, row in df.iterrows():
-        cells = [str(idx)] + [f"{v:,.0f}" if isinstance(v, float) and abs(v) >= 1000 else str(v) for v in row]
+    def fmt(v):
+        if isinstance(v, (int, float)) and not isinstance(v, bool) and float(v).is_integer():
+            return f"{int(v):,}"
+        return f"{v:,.0f}" if isinstance(v, float) and abs(v) >= 1000 else str(v)
+    for row in df.itertuples():   # itertuples keeps each column's dtype (iterrows upcasts ints to float)
+        cells = [str(row[0])] + [fmt(v) for v in row[1:]]
         lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines)
 
@@ -151,7 +172,7 @@ def main():
     sev.to_csv(out / "severity_by_owner_type.csv")
     cols = ["pin", "property_location", "property_type", "dwellings", "owner_type", "owner_portfolio", "owner_name",
             "mailing_address", "mailing_city_state", "mailing_zip", "severity", "past_due_bills", "past_due_amount",
-            "oldest_past_due", "lien_count", "lien_open_balance", "liens_json", "tax_sale", "in_bankruptcy",
+            "oldest_past_due", "lien_count", "newest_lien_year", "lien_open_balance", "liens_json", "tax_sale", "in_bankruptcy",
             "net_taxable", "fetched_at"]
     flagged = a[a.delinquent | a.has_lien | a.tax_sale | a.in_bankruptcy].sort_values("amount_owed", ascending=False)
     flagged[[c for c in cols if c in flagged.columns]].to_csv(out / "delinquent_properties.csv", index=False,
@@ -166,6 +187,7 @@ def main():
         "delinquency_rate_taxable_%": round(float(taxable.delinquent.mean() * 100), 2) if len(taxable) else None,
         "past_due_total_$": round(float(known.past_due_amount.sum()), 2),
         "properties_with_open_liens": int(known.has_lien.sum()),
+        f"properties_with_lien_sold_in_last_{RECENT_LIEN_YEARS}_years": int(known.has_recent_lien.sum()),
         "lien_open_balance_total_$": round(float(known.lien_open_balance.sum()), 2),
         "delinquent_with_existing_lien": int((known.delinquent & known.has_lien).sum()),
         "in_tax_sale": int(known.tax_sale.sum()),
