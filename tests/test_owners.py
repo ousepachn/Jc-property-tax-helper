@@ -109,3 +109,10 @@ def test_web_builder_helpers():
     xs, ys = np.array([0.0, 0.3, 2.0, 0.1]), np.array([0.0, 0.0, 0.0, 0.1])
     idx, d = Grid(xs, ys, [0, 1, 2, 3]).within(0.0, 0.0, 0.8)
     assert list(idx) == [0, 3, 1] and d[0] == 0
+
+
+def test_lot_area_sqft():
+    from build_web_data import lot_area_sqft
+    assert lot_area_sqft("25.22X98 AV", 0.0567) == 2470
+    assert lot_area_sqft("22X100", 0.0) == 2200
+    assert lot_area_sqft("36X76X20X75", 0.0) is None

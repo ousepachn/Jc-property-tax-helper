@@ -129,6 +129,17 @@ td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; white-space:
 .s-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; }
 .s-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; font-variant-numeric: tabular-nums; font-weight: 600; }
 .s-nums .k { display: block; font-size: .72rem; font-weight: 500; color: var(--muted); }
+.facts-list { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.facts-list div { padding: 10px 14px; border-top: 1px solid var(--line); min-width: 0; }
+.facts-list div:nth-child(-n+2) { border-top: 0; }
+.facts-list dt { font-size: var(--step--1); color: var(--muted); }
+.facts-list dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+@media (max-width: 520px) { .facts-list { grid-template-columns: 1fr; } .facts-list div:nth-child(2) { border-top: 1px solid var(--line); } }
+.links { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+.links li { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; min-width: 0; }
+.links a { font-weight: 700; text-decoration: none; }
+.links a::after { content: " ↗"; font-weight: 400; }
 /* plan */
 .timeline { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; }
 .timeline li { display: grid; grid-template-columns: 7.5em 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
@@ -390,10 +401,8 @@ function render(el, row, d, isExample) {
   const facts = [
     ["Block / lot", `${blk[1]} / ${blk[2]}${blk[3] ? " / " + blk[3] : ""}`],
     ["Assessed 2026", money(row[4])],
-    d.land || d.impr ? ["Land + building", `${kmoney(d.land)} + ${kmoney(d.impr)}`] : null,
     d.yb ? ["Built", d.yb] : null,
-    d.bd ? ["Building", d.bd] : null,
-    d.sale ? ["Last recorded sale", `${money(d.sale[1])} (${fmtDate(d.sale[0])})`] : null,
+    d.lotsf ? ["Lot", `${d.lotsf.toLocaleString()} sq ft`] : null,
   ].filter(Boolean);
 
   el.innerHTML = `
@@ -410,14 +419,16 @@ function render(el, row, d, isExample) {
       <div class="kpi"><span class="k">2026 2nd half vs 1st</span><span class="v">${h1 && h2 ? pct(h2 / h1 - 1, 0) : "–"}</span>
         <span class="d muted">${h1 && h2 ? money(h1) + " → " + money(h2) : "no quarterly bills"}</span></div>
     </div>
-    <nav class="jump" aria-label="Sections"><a href="#s-history">Tax history</a><a href="#s-compare">Similar nearby</a>
+    <nav class="jump" aria-label="Sections"><a href="#s-details">Details &amp; links</a><a href="#s-history">Tax history</a><a href="#s-compare">Similar nearby</a>
       <a href="#s-appeal">Appeal check</a><a href="#s-plan">Appeal plan</a></nav>
   </div>
+  <section class="block" id="s-details"></section>
   <section class="block" id="s-history"></section>
   <section class="block" id="s-compare"></section>
   <section class="block" id="s-appeal"></section>
   <section class="block" id="s-plan"></section>`;
 
+  renderDetails($("#s-details", el), row, d);
   renderHistory($("#s-history", el), row, d);
   renderCompare($("#s-compare", el), row, d, comps);
   renderAppeal($("#s-appeal", el), row, d);
@@ -426,6 +437,76 @@ function render(el, row, d, isExample) {
 
 function qv(d, y, qq) { return (d.q && d.q[(y - 2025) * 4 + qq - 1]) || 0; }
 function fmtDate(iso) { const [y, m, dd] = iso.split("-"); return new Date(+y, m - 1, +dd).toLocaleDateString("en-US", { month: "short", year: "numeric" }); }
+
+const CLASS_LABEL = { "1": "Vacant land", "2": "Residential (up to 4 units)", "3A": "Farm", "4A": "Commercial", "4B": "Industrial",
+  "4C": "Apartment (5+ units)", "5A": "Railroad", "5B": "Railroad", "6A": "Telephone", "15A": "Public school", "15B": "Other school",
+  "15C": "Public property", "15D": "Church and charitable", "15E": "Cemetery", "15F": "Other exempt" };
+const STATUTE = { "40A:20": "Long-term tax exemption (PILOT): the owner pays an annual service charge instead of regular taxes",
+  "40A:21": "Five-year exemption and abatement for new construction or improvements",
+  "54:4-3.6": "Exempt: nonprofit, religious, charitable or educational use", "54:4.3-6": "Exempt: nonprofit, religious, charitable or educational use",
+  "54:4-3.3": "Exempt: public property", "54:4-3.30": "Exempt: 100% disabled veteran" };
+function statuteLabel(st) { const k = Object.keys(STATUTE).find(k => st.startsWith(k)); return k ? STATUTE[k] : `Exemption under N.J.S.A. ${st}`; }
+function decodeBuilding(code) {
+  if (!code || /VACANT|COMMON AREA/.test(code)) return [];
+  const out = [], t = code.split(/[-\s]+/);
+  for (const x of t) {
+    let m;
+    if ((m = x.match(/^(\d+(?:\.\d+)?)S(?:\+|$)/))) out.push(`${m[1]} ${+m[1] === 1 ? "story" : "stories"}`);
+    else if ((m = x.match(/^(\d+)U$/))) out.push(`${m[1]} ${+m[1] === 1 ? "unit" : "units"}`);
+    else if (x === "F") out.push("frame");
+    else if (x === "B") out.push("brick");
+    else if (x === "B+F" || x === "B&F") out.push("brick and frame");
+    else if (x === "D") out.push("detached");
+    else if (x === "CONDO") out.push("condominium");
+    else if ((m = x.match(/^G(\d?)$/))) out.push(m[1] ? `${m[1]}-car garage` : "garage");
+  }
+  return out;
+}
+function renderDetails(sec, row, d) {
+  const blk = row[0].split("_"), A = row[4];
+  const addr = `${row[1]}, Jersey City, NJ`;
+  const bd = decodeBuilding(d.bd || "");
+  const items = [
+    ["Block / lot / qualifier", `${blk[1]} / ${blk[2]}${blk[3] ? " / " + blk[3] : ""}`],
+    ["Tax account number", d.acct || "–"],
+    ["Property class", d.cls ? `${d.cls} · ${CLASS_LABEL[d.cls] || ""}` : "–"],
+    ["Lot dimensions", d.lot || "–"],
+    ["Lot area", d.lotsf ? `${d.lotsf.toLocaleString()} sq ft${d.lotsf >= 21780 ? ` (${(d.lotsf / 43560).toFixed(2)} acres)` : ""}${blk[3] ? " (whole building lot)" : ""}` : "–"],
+    ["Zoning (as listed)", d.zn || "Not listed in the tax list"],
+    ["Building code", d.bd ? `${d.bd}${bd.length ? " · " + bd.join(", ") : ""}` : "–"],
+    ["Dwelling units", d.dw ?? "–"],
+    ["Year built", d.yb ?? "–"],
+    ["Assessment 2026", `${money(A)} (land ${money(d.land)}, building ${money(d.impr)})`],
+    ["Last recorded sale", d.sale ? `${money(d.sale[1])} on ${new Date(d.sale[0] + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : "None since mid-2024 in the tax list"],
+    ["Deductions", d.ded ? `${money(d.ded[0])} a year${d.ded[1] ? " · senior citizen" : ""}${d.ded[2] ? " · veteran" : ""}` : "None on file"],
+    ["Exemptions / abatements", d.ex ? `${statuteLabel(d.ex[0])}${d.ex[1] ? ` · ${money(d.ex[1])} of value exempt` : ""}` : "None on file"],
+  ];
+  if (d.fac) items.push(["Listed as", d.fac]);
+  const codeUnits = (d.bd || "").match(/(?:^|-)(\d+)U(?:-|$)/);
+  const mismatch = codeUnits && d.dw && +codeUnits[1] !== d.dw && !blk[3]
+    ? `The building code says ${codeUnits[1]} units but the dwelling count says ${d.dw}. Ask the assessor which is right; the unit count affects your assessment.` : "";
+  const enc = encodeURIComponent;
+  const links = [
+    ["Google Maps", `https://www.google.com/maps/search/?api=1&query=${enc(d.ll ? d.ll.join(",") : addr)}`, "Map and satellite view of the parcel"],
+    d.ll ? ["Street View", `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${d.ll.join(",")}`, "See the front of the building"] : null,
+    ["City tax bills and payments", "https://apps.hlssystems.com/JerseyCity/PropertyTaxInquiry", `Official bills and balance. Search account ${d.acct || ""} or block ${blk[1]}, lot ${blk[2]}`],
+    ["County assessment record", "https://taxrecords-nj.com/pub/cgi/prc6.cgi?district=0906&ms_user=ctb09", `Hudson County's official assessment search. Pick Jersey City, enter block ${blk[1]} and lot ${blk[2]}${blk[3] ? ", qualifier " + blk[3] : ""}`],
+    ["City tax map", "https://tmv.civilsolutions.biz/viewer/663cc12bfa2110f83de30983", `Jersey City's official tax map; find block ${blk[1]}`],
+    ["Zoning map", "https://data.jerseycitynj.gov/explore/assets/zoning-map-2019/", "Jersey City's official zoning map"],
+    ["Building permits", "https://www.jerseycitynj.gov/cityhall/HousingAndDevelopment/onlinepermittinglicensing", "City permit portal: open and past permits for the address"],
+    ["FEMA flood map", `https://msc.fema.gov/portal/search?AddressQuery=${enc(addr)}`, "Flood zone for the address"],
+  ].filter(Boolean);
+  sec.innerHTML = `<header><span class="eyebrow">1 · Property details &amp; links</span><h3>Check what the city has on file</h3>
+    <p class="small muted">From the state's 2026 tax list. If something is wrong (lot size, units, a missing senior or veteran deduction),
+      tell the Tax Assessor. Wrong facts are the simplest assessment fix.</p></header>
+    ${mismatch ? `<div class="note spike"><b>Check this:</b> ${esc(mismatch)}</div>` : ""}
+    <dl class="facts-list">${items.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
+    <div class="note"><b>Rooms, bedrooms, bathrooms and living area aren't in any public list.</b> They are on the Tax Assessor's
+      property record card, from the assessor's inspections. Ask the assessor for a copy (an OPRA request works): call 201-547-5131 or
+      email jccityassessor@jcnj.org with block ${esc(blk[1])}, lot ${esc(blk[2])}${blk[3] ? ", qualifier " + esc(blk[3]) : ""}. Check those counts too; an extra bathroom or
+      bedroom on the card raises your assessment.</div>
+    <ul class="links">${links.map(([t, u, h]) => `<li><a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)}</a><span class="small muted">${esc(h)}</span></li>`).join("")}</ul>`;
+}
 
 function renderHistory(sec, row, d) {
   const years = META.years, h = d.h, rates = META.rates;
@@ -448,7 +529,7 @@ function renderHistory(sec, row, d) {
   }
   const h1 = qv(d, 2026, 1) + qv(d, 2026, 2), h2 = qv(d, 2026, 3) + qv(d, 2026, 4);
 
-  sec.innerHTML = `<header><span class="eyebrow">1 · Your tax history</span><h3>How your tax changed since ${years[0]}</h3></header>
+  sec.innerHTML = `<header><span class="eyebrow">2 · Your tax history</span><h3>How your tax changed since ${years[0]}</h3></header>
     <div class="chart" id="c-hist"></div>
     ${biggest && biggest.ch >= 0.15 ? `<div class="note spike"><b>Biggest jump: ${biggest.y}, ${pct(biggest.ch)}.</b> ${explain(biggest)}</div>` : ""}
     <div class="tablewrap"><table>
@@ -487,7 +568,7 @@ function explain(b) {
 function renderCompare(sec, row, d, comps) {
   const years = META.years, type = row[3];
   if (!comps.length || !d.cm) {
-    sec.innerHTML = `<header><span class="eyebrow">2 · Similar nearby</span><h3>Compared with similar properties</h3></header>
+    sec.innerHTML = `<header><span class="eyebrow">3 · Similar nearby</span><h3>Compared with similar properties</h3></header>
       <p class="note">There aren't enough similar properties nearby to compare this one with.</p>`; return; }
   const mine = d.h, med = d.cm;
   const myCh = mine[7] && mine[6] ? mine[7] / mine[6] - 1 : null;
@@ -499,7 +580,7 @@ function renderCompare(sec, row, d, comps) {
   const rank = taxes.filter(t => t < mine[7]).length / Math.max(1, taxes.length);
   const miles = d.cr <= 0.8 ? "half a mile" : "a mile", nComps = d.cn || comps.length;
   const word = TYPE_PLURAL[type] || "properties";
-  sec.innerHTML = `<header><span class="eyebrow">2 · Similar nearby</span><h3>Compared with ${nComps} similar ${esc(word)} within ${miles}</h3>
+  sec.innerHTML = `<header><span class="eyebrow">3 · Similar nearby</span><h3>Compared with ${nComps} similar ${esc(word)} within ${miles}</h3>
     <p class="small muted">Same property type, assessed between two-thirds and one-and-a-half times your assessment. The table lists the ${Math.min(10, comps.length)} closest.</p></header>
     <div class="kpis">
       <div class="kpi"><span class="k">You, 2025 → 2026</span><span class="v">${pct(myCh)}</span></div>
@@ -527,7 +608,7 @@ function compareText(my, med, rank, word) {
 
 function renderAppeal(sec, row, d) {
   const A = row[4], type = row[3];
-  const head = `<header><span class="eyebrow">3 · Appeal check for ${RATIO.year}</span><h3>Could an appeal lower your assessment?</h3></header>`;
+  const head = `<header><span class="eyebrow">4 · Appeal check for ${RATIO.year}</span><h3>Could an appeal lower your assessment?</h3></header>`;
   if (!A || type === "exempt") { sec.innerHTML = head + `<p class="note">This property has no taxable assessment to appeal.</p>`; return; }
   const loV = A / RATIO.hi, hiV = A / RATIO.lo, midV = A / RATIO.avg;
   const sales = (d.s || []).map(s => ({ row: BYPIN.get(s[0]), date: s[1], price: s[2], av: s[3], km: s[4] })).filter(s => s.row);
@@ -613,7 +694,7 @@ function renderPlan(sec, row) {
     ["After the judgment", "If you disagree, appeal to the Tax Court within 45 days. A board judgment usually holds for the next two years (Freeze Act)."],
   ];
   const done = store.get("jctc:plan", {});
-  sec.innerHTML = `<header><span class="eyebrow">4 · Appeal plan</span><h3>Getting ready to appeal your ${RATIO.year} assessment</h3>
+  sec.innerHTML = `<header><span class="eyebrow">5 · Appeal plan</span><h3>Getting ready to appeal your ${RATIO.year} assessment</h3>
       <p class="small muted">Appeals for ${RATIO.year} go to the Hudson County Board of Taxation. If an assessment is over $1 million, the owner may file directly with the NJ Tax Court instead.</p></header>
     <ol class="timeline">${steps.map(([iso, t, h]) => { const dt = new Date(iso + "T12:00:00"); const past = dt < today;
       return `<li class="${past ? "past" : ""}"><span class="when">${dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>

@@ -69,6 +69,35 @@ def tidy_address(s):
     return re.sub(r"\bAv$", "Ave", s)
 
 
+def lot_area_sqft(desc, acres):
+    """Lot area from the tax list: calculated acreage when present, else a plain 'W X D' dimension."""
+    if acres and acres > 0:
+        return round(acres * 43560)
+    m = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*X\s*(\d+(?:\.\d+)?)\s*", desc or "")
+    return round(float(m.group(1)) * float(m.group(2))) if m else None
+
+
+def lot_and_exemptions(r):
+    """Fields an owner can check against their property (MOD-IV 2026)."""
+    out = {}
+    area = lot_area_sqft(r.land_description.strip(), pd.to_numeric(r.calculated_acreage, errors="coerce"))
+    if area:
+        out["lotsf"] = area
+    for key, col in (("zn", "zoning"), ("cls", "property_class"), ("fac", "facility_name")):
+        if r[col].strip():
+            out[key] = r[col].strip()
+    dw = pd.to_numeric(r.no_of_dwellings, errors="coerce")
+    if dw and dw > 0:
+        out["dw"] = int(dw)
+    ded, sen, vet = (int(pd.to_numeric(r[c], errors="coerce") or 0) for c in ("deduction_amount", "senior_citizens_cnt", "veterans_cnt"))
+    if ded or sen or vet:
+        out["ded"] = [ded, sen, vet]
+    ex_amt = sum(int(pd.to_numeric(r[f"exemption_amt_{k}"], errors="coerce") or 0) for k in range(1, 5))
+    if r.exempt_statute.strip() or ex_amt:
+        out["ex"] = [r.exempt_statute.strip(), ex_amt]
+    return out
+
+
 class Grid:
     """Nearest-neighbour search over a subset of points, bucketed in ~0.4 km cells (no scipy needed)."""
 
@@ -109,7 +138,7 @@ def main():
 
     acc = pd.read_csv(exp / "accounts.csv", dtype=str, low_memory=False).fillna("")
     acc = acc[(acc.county_district == CD) & acc.status.isin(["done", "no_bills"])]
-    acc = acc[["pin", "property_location", "property_class", "land_value", "improvement_value", "net_taxable"]]
+    acc = acc[["pin", "account_id", "property_location", "property_class", "land_value", "improvement_value", "net_taxable"]]
     acc = acc.drop_duplicates("pin").reset_index(drop=True)
 
     # MOD-IV: attributes from 2026, assessments by year
@@ -195,6 +224,8 @@ def main():
     a26_of = assess.get(2026, {})
     bdesc, ldesc = m26.building_description.str.strip().to_dict(), m26.land_description.str.strip().to_dict()
     built = num(m26.year_constructed).to_dict()
+    details = {p: lot_and_exemptions(r) for p, r in m26.iterrows()}
+    acct_no = acc.account_id.tolist()
 
     by_type = defaultdict(list)
     for i, t in enumerate(types):
@@ -217,8 +248,12 @@ def main():
         rec = {"h": history, "a": a_hist, "q": quarters[pin] if pin in quarters else None, "land": land[i], "impr": impr[i]}
         if pin in adj:
             rec["adj"] = adj[pin]
+        rec["acct"] = acct_no[i]
+        if not math.isnan(xs[i]):
+            rec["ll"] = [round(ll[i][0], 6), round(ll[i][1], 6)]
         if pin in bdesc:
             rec["bd"], rec["lot"] = bdesc[pin], ldesc[pin]
+            rec.update(details[pin])
             yb = built.get(pin)
             if yb and 1700 < yb <= 2027:
                 rec["yb"] = int(yb)
