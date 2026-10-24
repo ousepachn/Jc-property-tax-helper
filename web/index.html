@@ -1,204 +1,286 @@
 <title>Jersey City Tax Check</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
 <style>
-/* Layout: one civic-document column; search on top, property sections stacked, each a plain titled block. */
+/* Layout: a dark full-bleed map band of every parcel opens the page (search floats on it), then a single report column
+   with sticky section tabs. The map stays dark in both themes on purpose; the report follows the viewer's theme. */
 :root {
-  --bg: #f3f5f2; --surface: #ffffff; --ink: #17211d; --muted: #5a6661; --line: #dde3df; --grid: #e8ece9;
-  --accent: #0d6b57; --accent-ink: #ffffff; --accent-soft: #e2f0eb;
+  --bg: #f2f5f3; --surface: #ffffff; --surface-2: #f7f9f8; --ink: #101916; --muted: #5a6762; --line: #dfe6e2; --grid: #e9eeeb;
+  --accent: #0b7a62; --accent-ink: #ffffff; --accent-soft: #dff1ea;
   --series-1: #2a78d6; --series-2: #eb6834;
-  --good: #2d7a3e; --good-soft: #e5f2e7; --warn: #9a5b00; --warn-soft: #fbf0dc; --bad: #b3261e; --bad-soft: #fbe6e4;
+  --good: #2d7a3e; --good-soft: #e3f2e6; --warn: #985a00; --warn-soft: #fbefd9; --bad: #b3261e; --bad-soft: #fbe5e3;
+  --shadow: 0 1px 2px rgba(16, 25, 22, .06), 0 8px 24px rgba(16, 25, 22, .06);
+  /* map band: one look in both themes */
+  --map-bg: #0c1311; --map-ink: #e9f1ed; --map-muted: #93a59e; --map-line: rgba(233, 241, 237, .14); --map-glass: rgba(16, 26, 23, .78);
+  --map-sel: #5ad1ff; --map-comp: #ffffff;
+  --ramp-0: #3a2a14; --ramp-1: #6b4512; --ramp-2: #a3640f; --ramp-3: #d98a1c; --ramp-4: #f4b544; --ramp-5: #ffe39a;
   --font-display: "Bricolage Grotesque", "Public Sans", system-ui, sans-serif;
   --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --step--1: .84rem; --step-0: 1rem; --step-1: 1.2rem; --step-2: 1.5rem; --step-3: 2rem;
+  --step--1: .84rem; --step-0: 1rem; --step-1: 1.22rem; --step-2: 1.6rem; --step-3: clamp(2rem, 1.4rem + 2.6vw, 3.1rem);
+  --r: 16px;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg: #121614; --surface: #1a201d; --ink: #e8eeea; --muted: #a0aca6; --line: #2d3632; --grid: #26302b;
-  --accent: #5cc2a5; --accent-ink: #0b1a15; --accent-soft: #1b2e27;
+  --bg: #0f1412; --surface: #171e1b; --surface-2: #1c2420; --ink: #e7eeea; --muted: #9daaa4; --line: #2a3430; --grid: #242e2a;
+  --accent: #5cc8a8; --accent-ink: #08130f; --accent-soft: #17302a;
   --series-1: #3987e5; --series-2: #d95926;
-  --good: #7cc98b; --good-soft: #1b2b1f; --warn: #e5b45e; --warn-soft: #2e2617; --bad: #f08a82; --bad-soft: #321b19;
+  --good: #7cc98b; --good-soft: #182a1d; --warn: #e6b45c; --warn-soft: #2d2516; --bad: #f08a82; --bad-soft: #321b19;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
   color-scheme: dark; } }
 :root[data-theme="dark"] {
-  --bg: #121614; --surface: #1a201d; --ink: #e8eeea; --muted: #a0aca6; --line: #2d3632; --grid: #26302b;
-  --accent: #5cc2a5; --accent-ink: #0b1a15; --accent-soft: #1b2e27;
+  --bg: #0f1412; --surface: #171e1b; --surface-2: #1c2420; --ink: #e7eeea; --muted: #9daaa4; --line: #2a3430; --grid: #242e2a;
+  --accent: #5cc8a8; --accent-ink: #08130f; --accent-soft: #17302a;
   --series-1: #3987e5; --series-2: #d95926;
-  --good: #7cc98b; --good-soft: #1b2b1f; --warn: #e5b45e; --warn-soft: #2e2617; --bad: #f08a82; --bad-soft: #321b19;
+  --good: #7cc98b; --good-soft: #182a1d; --warn: #e6b45c; --warn-soft: #2d2516; --bad: #f08a82; --bad-soft: #321b19;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
   color-scheme: dark; }
 
 * { box-sizing: border-box; }
 body { background: var(--bg); color: var(--ink); font: 400 var(--step-0)/1.55 var(--font-body); }
-.wrap { max-width: 780px; margin: 0 auto; padding-block: 20px 56px;
-  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: balance; margin: 0; }
-h1 { font-size: var(--step-3); letter-spacing: -.01em; }
-h2 { font-size: var(--step-2); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--map-bg); }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.col { max-width: 820px; margin: 0 auto; }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.1; text-wrap: balance; margin: 0; }
+h2 { font-size: var(--step-2); letter-spacing: -.01em; }
 h3 { font-size: var(--step-1); }
 p { margin: 0; }
 a { color: var(--accent); }
-.eyebrow { font-size: var(--step--1); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
-.muted { color: var(--muted); }
-.small { font-size: var(--step--1); }
-.num { font-variant-numeric: tabular-nums; }
-:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.eyebrow { font-size: .74rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 700; }
+.muted { color: var(--muted); } .small { font-size: var(--step--1); } .num { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 
-/* masthead + search */
-.mast { display: grid; gap: 8px; margin-bottom: 18px; }
-.mast p { max-width: 62ch; color: var(--muted); }
-.search { position: relative; }
-.search label { display: block; font-weight: 600; margin-bottom: 6px; }
-.search input { width: 100%; font: inherit; font-size: 1.05rem; padding: 12px 14px; border-radius: 10px;
-  border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); }
-.search input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
-.results { list-style: none; margin: 6px 0 0; padding: 0; background: var(--surface); border: 1px solid var(--line);
-  border-radius: 10px; overflow: hidden; }
-.results li button { all: unset; box-sizing: border-box; display: flex; justify-content: space-between; gap: 12px; width: 100%;
-  padding: 10px 14px; cursor: pointer; border-top: 1px solid var(--line); }
-.results li:first-child button { border-top: 0; }
-.results li button:hover, .results li button:focus-visible { background: var(--accent-soft); }
-.results .r-type { color: var(--muted); font-size: var(--step--1); white-space: nowrap; }
-.status-line { margin-top: 8px; font-size: var(--step--1); color: var(--muted); min-height: 1.4em; }
+/* ---------- map band ---------- */
+.band { background: var(--map-bg); color: var(--map-ink); position: relative; }
+.band-inner { max-width: 1240px; margin: 0 auto; padding-block: 18px 0; display: grid; gap: 14px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand .mark { width: 28px; height: 28px; border-radius: 8px; background: conic-gradient(from 200deg, var(--ramp-2), var(--ramp-5), var(--ramp-3), var(--ramp-1), var(--ramp-2)); }
+.brand b { font-family: var(--font-display); font-size: 1.05rem; letter-spacing: .01em; }
+.brand span { color: var(--map-muted); font-size: var(--step--1); }
+.hero-copy h1 { font-size: var(--step-3); font-weight: 800; letter-spacing: -.02em; max-width: 16ch; }
+.hero-copy h1 em { font-style: normal; color: var(--ramp-4); }
+.hero-copy p { color: var(--map-muted); max-width: 52ch; margin-top: 8px; }
+.stage-wrap { position: relative; }
+.stage { position: relative; height: clamp(360px, 58vh, 620px); border-radius: 22px 22px 0 0; overflow: hidden; border: 1px solid var(--map-line); border-bottom: 0; }
+#map { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; display: block; }
+#map.dragging { cursor: grabbing; }
+.glass { background: var(--map-glass); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  border: 1px solid var(--map-line); border-radius: var(--r); color: var(--map-ink); }
+.search { position: absolute; top: 14px; left: 14px; width: min(400px, calc(100% - 28px)); padding: 12px; z-index: 3; }
+.search label { display: block; font-weight: 700; font-size: var(--step--1); margin-bottom: 6px; color: var(--map-muted); }
+.search .field { position: relative; }
+.search input { width: 100%; font: inherit; font-size: 1.02rem; padding: 12px 14px 12px 40px; border-radius: 12px; border: 1px solid var(--map-line);
+  background: rgba(255,255,255,.07); color: var(--map-ink); transition: border-color .2s, background .2s, box-shadow .2s; }
+.search input::placeholder { color: var(--map-muted); }
+.search input:focus { outline: none; border-color: var(--ramp-4); background: rgba(255,255,255,.1); box-shadow: 0 0 0 4px rgba(244,181,68,.18); }
+.search .icon { position: absolute; left: 13px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); border: 2px solid var(--map-muted);
+  border-radius: 50%; } .search .icon::after { content: ""; position: absolute; width: 7px; height: 2px; background: var(--map-muted); right: -6px; bottom: -3px; transform: rotate(45deg); }
+.results { list-style: none; margin: 8px 0 0; padding: 0; max-height: 46vh; overflow: auto; border-radius: 12px; }
+.results li { animation: drop .22s both; animation-delay: calc(var(--i) * 18ms); }
+.results button { all: unset; box-sizing: border-box; display: flex; justify-content: space-between; gap: 12px; width: 100%; padding: 10px 12px;
+  border-radius: 10px; cursor: pointer; }
+.results button:hover, .results button:focus-visible { background: rgba(255,255,255,.09); }
+.results .r-type { color: var(--map-muted); font-size: var(--step--1); white-space: nowrap; }
+.status-line { margin-top: 6px; font-size: var(--step--1); color: var(--map-muted); }
+.status-line:empty { display: none; }
+.controls { position: absolute; right: 14px; bottom: 14px; display: grid; gap: 6px; z-index: 2; }
+.controls button { width: 40px; height: 40px; font: 700 1.2rem var(--font-body); }
+.btn-glass { all: unset; box-sizing: border-box; display: grid; place-items: center; cursor: pointer; background: var(--map-glass); color: var(--map-ink);
+  border: 1px solid var(--map-line); border-radius: 12px; backdrop-filter: blur(10px); transition: transform .15s, background .15s; }
+.btn-glass:hover { background: rgba(40,56,50,.9); } .btn-glass:active { transform: scale(.94); }
+.legendbox { position: absolute; left: 14px; bottom: 14px; padding: 10px 12px; z-index: 2; display: grid; gap: 8px; max-width: calc(100% - 90px); }
+.seg { display: inline-flex; background: rgba(255,255,255,.06); border-radius: 10px; padding: 3px; gap: 2px; }
+.seg button { all: unset; cursor: pointer; padding: 5px 10px; border-radius: 8px; font-size: .8rem; font-weight: 700; color: var(--map-muted); transition: background .2s, color .2s; }
+.seg button[aria-pressed="true"] { background: var(--map-ink); color: var(--map-bg); }
+.ramp { display: flex; gap: 2px; } .ramp i { flex: 1; height: 8px; min-width: 22px; border-radius: 2px; }
+.ramp-labels { display: flex; justify-content: space-between; font-size: .7rem; color: var(--map-muted); font-variant-numeric: tabular-nums; gap: 8px; }
+.peek { position: absolute; right: 14px; top: 14px; width: min(340px, calc(100% - 28px)); padding: 14px; z-index: 2; display: grid; gap: 8px;
+  animation: pop .45s cubic-bezier(.2,.9,.25,1.15) both; }
+.peek .addr { font-family: var(--font-display); font-size: 1.15rem; font-weight: 700; line-height: 1.2; }
+.peek .row { display: flex; gap: 16px; flex-wrap: wrap; }
+.peek .k { display: block; font-size: .72rem; color: var(--map-muted); }
+.peek .v { font-weight: 700; font-variant-numeric: tabular-nums; font-size: 1.05rem; }
+.peek .up { color: #ff9b8f; }
+.peek a { all: unset; cursor: pointer; justify-self: start; font-weight: 700; font-size: .9rem; padding: 8px 12px; border-radius: 10px;
+  background: var(--ramp-4); color: #241505; }
+.peek a:hover { background: var(--ramp-5); }
+.hint { position: absolute; top: 16px; right: 16px; z-index: 1; font-size: .74rem; color: var(--map-muted); padding: 6px 10px; }
+@media (max-width: 760px) {
+  .stage { height: clamp(380px, 64vh, 560px); }
+  .search { position: relative; top: auto; left: auto; width: 100%; }
+  .stage-wrap { display: grid; gap: 10px; }
+  .peek { position: relative; right: auto; bottom: auto; width: 100%; }
+  .hint { display: none; }
+}
 
-/* property header */
-.prop { margin-top: 22px; display: grid; gap: 28px; }
-.prop-head { display: grid; gap: 10px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
-.example-chip { justify-self: start; font-size: var(--step--1); font-weight: 600; padding: 3px 10px; border-radius: 99px;
-  background: var(--warn-soft); color: var(--warn); }
+/* ---------- report ---------- */
+.report { padding-block: 26px 64px; }
+.prop { display: grid; gap: 22px; }
+.prop-head { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 20px; display: grid; gap: 12px;
+  box-shadow: var(--shadow); }
+.example-chip { justify-self: start; font-size: var(--step--1); font-weight: 700; padding: 4px 10px; border-radius: 99px; background: var(--warn-soft); color: var(--warn); }
+.prop-head h2 { font-size: clamp(1.6rem, 1.2rem + 1.6vw, 2.3rem); font-weight: 800; letter-spacing: -.015em; }
 .facts { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: var(--step--1); color: var(--muted); }
 .facts b { color: var(--ink); font-weight: 600; }
-.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-@media (max-width: 420px) { .kpi { padding: 10px; } .kpi .v { font-size: 1.2rem; } }
-.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; min-width: 0; }
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.kpi { background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; min-width: 0; position: relative; overflow: hidden; }
 .kpi .k { display: block; font-size: var(--step--1); color: var(--muted); }
-.kpi .v { display: block; font-family: var(--font-display); font-size: 1.45rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kpi .v { display: block; font-family: var(--font-display); font-size: clamp(1.25rem, 1rem + 1.2vw, 1.75rem); font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
 .kpi .d { font-size: var(--step--1); font-weight: 600; }
 .up { color: var(--bad); } .down { color: var(--good); }
-.jump { display: flex; flex-wrap: wrap; gap: 8px; }
-.jump a { font-size: var(--step--1); font-weight: 600; text-decoration: none; padding: 6px 12px; border-radius: 99px;
-  border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
-.jump a:hover { border-color: var(--accent); color: var(--accent); }
-
-/* sections */
-section.block { display: grid; gap: 14px; scroll-margin-top: 12px; }
-.block > header { display: grid; gap: 4px; }
-.note { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-size: .95rem; }
+.tabs { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); margin-inline: -4px; padding: 10px 4px; display: flex; gap: 6px; overflow-x: auto;
+  scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs a { flex: none; font-size: var(--step--1); font-weight: 700; text-decoration: none; padding: 7px 13px; border-radius: 99px; color: var(--muted);
+  border: 1px solid var(--line); background: var(--surface); transition: color .2s, background .2s, border-color .2s; }
+.tabs a.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+section.block { display: grid; gap: 14px; scroll-margin-top: 64px; background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 20px;
+  box-shadow: var(--shadow); }
+.block > header { display: grid; gap: 5px; }
+.note { background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; font-size: .95rem; }
 .note.spike { background: var(--warn-soft); border-color: transparent; }
-.verdict { border-radius: 12px; padding: 14px; display: grid; gap: 6px; }
+.verdict { border-radius: 14px; padding: 14px; display: grid; gap: 6px; }
 .verdict.good { background: var(--good-soft); } .verdict.warn { background: var(--warn-soft); } .verdict.bad { background: var(--bad-soft); }
-.verdict.neutral { background: var(--surface); border: 1px solid var(--line); }
-.pill { justify-self: start; font-size: var(--step--1); font-weight: 700; padding: 2px 10px; border-radius: 99px; background: var(--surface); }
+.verdict.neutral { background: var(--surface-2); border: 1px solid var(--line); }
+.pill { justify-self: start; font-size: var(--step--1); font-weight: 800; padding: 3px 11px; border-radius: 99px; background: var(--surface); }
 .verdict.good .pill { color: var(--good); } .verdict.warn .pill { color: var(--warn); } .verdict.bad .pill { color: var(--bad); }
-
-/* charts */
-.chart { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 8px 6px; position: relative; }
+.chart { background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 10px 8px 6px; position: relative; }
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
 .chart text { fill: var(--muted); font: 500 11px var(--font-body); }
 .legend { display: flex; flex-wrap: wrap; gap: 14px; padding: 0 8px 6px; font-size: var(--step--1); color: var(--muted); }
-.legend span::before { content: ""; display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 6px;
-  vertical-align: middle; background: var(--c); }
-.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); font-size: var(--step--1);
-  padding: 6px 9px; border-radius: 8px; white-space: nowrap; transform: translate(-50%, -110%); line-height: 1.35; }
-.tip[hidden] { display: none; }
-
-/* tables */
-.tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.legend span::before { content: ""; display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; background: var(--c); }
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); font-size: var(--step--1); padding: 6px 9px; border-radius: 8px;
+  white-space: nowrap; transform: translate(-50%, -110%); line-height: 1.35; z-index: 2; }
+.tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
 table { width: 100%; border-collapse: collapse; font-size: .92rem; }
 th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
 tr:last-child td { border-bottom: 0; }
 th { font-size: var(--step--1); color: var(--muted); font-weight: 600; white-space: nowrap; }
 td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.chip { display: inline-block; font-size: .72rem; font-weight: 700; padding: 1px 7px; border-radius: 99px; margin-left: 6px;
-  background: var(--warn-soft); color: var(--warn); vertical-align: 1px; }
+.chip { display: inline-block; font-size: .72rem; font-weight: 700; padding: 1px 7px; border-radius: 99px; margin-left: 6px; background: var(--warn-soft); color: var(--warn); vertical-align: 1px; }
 .chip.bad { background: var(--bad-soft); color: var(--bad); }
-
-/* appeal */
-.valuebox { display: grid; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
-.valuebox label { font-weight: 600; }
+.valuebox { display: grid; gap: 8px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+.valuebox label { font-weight: 700; }
 .valuebox .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-.valuebox input { font: inherit; font-size: 1.05rem; width: 12em; max-width: 100%; padding: 9px 12px; border-radius: 8px;
-  border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); font-variant-numeric: tabular-nums; }
+.valuebox input { font: inherit; font-size: 1.05rem; width: 12em; max-width: 100%; padding: 9px 12px; border-radius: 10px; border: 1.5px solid var(--line);
+  background: var(--surface); color: var(--ink); font-variant-numeric: tabular-nums; }
 .range { position: relative; height: 34px; margin: 6px 4px 18px; }
-.range .band { position: absolute; top: 12px; height: 10px; border-radius: 5px; background: var(--good-soft); border: 1px solid var(--good); }
+.range .band { position: absolute; top: 12px; height: 10px; border-radius: 5px; background: var(--good-soft); border: 1px solid var(--good); transition: left .3s, width .3s; }
 .range .axis { position: absolute; top: 16px; left: 0; right: 0; height: 2px; background: var(--line); }
-.range .mark { position: absolute; top: 4px; width: 3px; height: 26px; border-radius: 2px; background: var(--ink); transform: translateX(-1px); }
+.range .mark { position: absolute; top: 4px; width: 4px; height: 26px; border-radius: 2px; background: var(--ink); transform: translateX(-2px); transition: left .35s cubic-bezier(.2,.8,.2,1); }
 .range .lab { position: absolute; top: 32px; font-size: .72rem; color: var(--muted); transform: translateX(-50%); white-space: nowrap; }
-
-.sales { list-style: none; padding: 0; margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.sales { list-style: none; padding: 0; margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
 .sales li { padding: 10px 14px; border-top: 1px solid var(--line); display: grid; gap: 6px; }
 .sales li:first-child { border-top: 0; }
 .s-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; }
 .s-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; font-variant-numeric: tabular-nums; font-weight: 600; }
 .s-nums .k { display: block; font-size: .72rem; font-weight: 500; color: var(--muted); }
-.facts-list { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.facts-list { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .facts-list div { padding: 10px 14px; border-top: 1px solid var(--line); min-width: 0; }
 .facts-list div:nth-child(-n+2) { border-top: 0; }
 .facts-list dt { font-size: var(--step--1); color: var(--muted); }
 .facts-list dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
 @media (max-width: 520px) { .facts-list { grid-template-columns: 1fr; } .facts-list div:nth-child(2) { border-top: 1px solid var(--line); } }
 .links { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
-.links li { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; min-width: 0; }
-.links a { font-weight: 700; text-decoration: none; }
-.links a::after { content: " ↗"; font-weight: 400; }
-/* plan */
-.timeline { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; }
+.links li { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 2px; min-width: 0;
+  transition: transform .2s, border-color .2s; }
+.links li:hover { transform: translateY(-2px); border-color: var(--accent); }
+.links a { font-weight: 700; text-decoration: none; } .links a::after { content: " ↗"; font-weight: 400; }
+.timeline { list-style: none; padding: 0; margin: 0; display: grid; }
 .timeline li { display: grid; grid-template-columns: 7.5em 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .timeline li:last-child { border-bottom: 0; }
 .timeline .when { font-weight: 700; font-variant-numeric: tabular-nums; }
 .timeline .past .when, .timeline .past { color: var(--muted); }
-.timeline .nowline { color: var(--accent); }
 .checklist { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
-.checklist li { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
-  display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
+.checklist li { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; transition: background .25s; }
 .checklist input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--accent); }
-.checklist .t { font-weight: 600; }
-.checklist .h { font-size: .9rem; color: var(--muted); }
-.checklist li.done .t { text-decoration: line-through; color: var(--muted); }
+.checklist .t { font-weight: 600; } .checklist .h { font-size: .9rem; color: var(--muted); }
+.checklist li.done { background: var(--good-soft); } .checklist li.done .t { text-decoration: line-through; color: var(--muted); }
 .progress { font-size: var(--step--1); color: var(--muted); }
 .contacts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
-.contacts .note { display: grid; gap: 2px; }
-.contacts .sel { user-select: all; }
-footer.foot { margin-top: 36px; padding-top: 14px; border-top: 1px solid var(--line); font-size: var(--step--1); color: var(--muted); display: grid; gap: 6px; }
+.contacts .note { display: grid; gap: 2px; } .contacts .sel { user-select: all; }
+footer.foot { margin-top: 30px; padding-top: 14px; border-top: 1px solid var(--line); font-size: var(--step--1); color: var(--muted); display: grid; gap: 6px; }
+.skeleton { height: 120px; border-radius: 22px; background: linear-gradient(90deg, var(--surface) 0%, var(--surface-2) 50%, var(--surface) 100%); background-size: 200% 100%; animation: shimmer 1.2s infinite linear; }
+
+/* ---------- motion ---------- */
+@keyframes rise { from { transform: translateY(16px); opacity: .35; } to { transform: none; opacity: 1; } }
+@keyframes drop { from { transform: translateY(-4px); opacity: .3; } to { transform: none; opacity: 1; } }
+@keyframes pop { from { transform: translateY(10px) scale(.97); opacity: .3; } to { transform: none; opacity: 1; } }
+@keyframes grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.anim { animation: rise .6s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--i, 0) * 70ms); }
+.chart .bar { transform-box: fill-box; transform-origin: bottom; animation: grow .7s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--i) * 40ms); }
+.chart .line { transition: stroke-dashoffset 1.1s cubic-bezier(.3,.7,.2,1); }
+.chart .area { transition: opacity .9s .3s; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-delay: 0ms !important; transition-duration: 1ms !important; }
+}
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 </style>
 
-<div class="wrap">
-  <header class="mast">
-    <span class="eyebrow">Jersey City property tax</span>
-    <h1>Jersey City Tax Check</h1>
-    <p>Look up any Jersey City property to see how its tax changed since 2019, how it compares with similar
-      properties nearby, and whether an assessment appeal for 2027 may be worth it.</p>
-  </header>
-
-  <div class="search" role="search">
-    <label for="q">Find a property</label>
-    <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="Street address, e.g. 313 New York Ave" aria-controls="results">
-    <ul id="results" class="results" hidden></ul>
-    <div id="status" class="status-line" aria-live="polite">Loading property list…</div>
+<div class="band">
+  <div class="band-inner gutter">
+    <div class="brand"><span class="mark" aria-hidden="true"></span><b>JC Tax Check</b><span>Jersey City property tax, in plain numbers</span></div>
+    <div class="hero-copy">
+      <h1>What happened to <em>your</em> property tax?</h1>
+      <p>Every dot is one of Jersey City's 71,000 properties. Find yours to see how its tax changed since 2019, how it compares with neighbors,
+        and whether a 2027 appeal is worth it.</p>
+    </div>
+    <div class="stage-wrap">
+      <div class="search glass" role="search">
+        <label for="q">Find a property</label>
+        <div class="field"><span class="icon" aria-hidden="true"></span>
+          <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="e.g. 313 New York Ave" aria-controls="results"></div>
+        <ul id="results" class="results" hidden></ul>
+        <div id="status" class="status-line" aria-live="polite">Loading 71,000 properties…</div>
+      </div>
+      <div class="stage">
+        <canvas id="map" aria-label="Map of Jersey City properties colored by tax. Tap a dot to open it." role="img"></canvas>
+        <div class="legendbox glass">
+          <div class="seg" role="group" aria-label="Color the map by">
+            <button type="button" data-metric="tax" aria-pressed="true">2026 tax</button>
+            <button type="button" data-metric="chg" aria-pressed="false">Change since 2019</button>
+          </div>
+          <div class="ramp" id="ramp"></div>
+          <div class="ramp-labels" id="ramp-labels"></div>
+          <div class="ramp-labels"><span>Drag, pinch or scroll to explore · tap a dot</span></div>
+        </div>
+        <div class="controls">
+          <button class="btn-glass" type="button" id="zin" aria-label="Zoom in">+</button>
+          <button class="btn-glass" type="button" id="zout" aria-label="Zoom out">−</button>
+          <button class="btn-glass" type="button" id="zfit" aria-label="Show all of Jersey City" style="font-size:.9rem">⤢</button>
+        </div>
+        <div id="peek-desk"></div>
+      </div>
+      <div id="peek-mob"></div>
+    </div>
   </div>
-
-  <div id="prop" class="prop"></div>
-
-  <footer class="foot">
-    <p>Sources: Jersey City tax billing portal (bills for 2019–2026, collected October 2026), NJ MOD-IV tax lists 2021–2026
-      (assessments and recorded sales), NJ Division of Taxation tax-rate history and Chapter 123 ratios, NJOGIS parcel map.
-      Owner names are not used.</p>
-    <p>This page explains public records. It is not legal or tax advice; confirm figures with the Tax Assessor before filing.</p>
-  </footer>
 </div>
+
+<main class="report gutter">
+  <div class="col">
+    <div id="prop" class="prop"><div class="skeleton"></div></div>
+    <footer class="foot">
+      <p>Sources: Jersey City tax billing portal (bills 2019–2026, collected October 2026), NJ MOD-IV tax lists 2021–2026 (assessments, lot and
+        building data, recorded sales), NJ Division of Taxation tax-rate history and Chapter 123 ratios, NJOGIS parcel centroids for the map.
+        Owner names are not used.</p>
+      <p>This page explains public records. It is not legal or tax advice; confirm figures with the Tax Assessor before filing.</p>
+    </footer>
+  </div>
+</main>
 
 <script>
 (() => {
 "use strict";
-// ---------- constants (sources in the appeal-plan section) ----------
 const RATIO = { year: 2027, avg: 0.6669, lo: 0.5669, hi: 0.7669, prevAvg: 0.7282 };
-const RATE_2026 = 2.657; // per $100
-const EXAMPLE_PIN = "0906_10201_16"; // a typical 2–4 family home, shown until the viewer searches
+const RATE_2026 = 2.657;
+const EXAMPLE_PIN = "0906_10201_16"; // a typical 2–4 family home, shown until the viewer picks one
 const TYPE_LABEL = { condo: "Condo", "1fam": "Single-family home", "2-4fam": "2–4 family home", home: "Home",
   apt: "Apartment building (5+ units)", comm: "Commercial", land: "Vacant land", cpark: "Condo parking / storage",
   exempt: "Tax-exempt", none: "Unclassified", other: "Other" };
 const TYPE_PLURAL = { condo: "condos", "1fam": "single-family homes", "2-4fam": "2–4 family homes", home: "homes",
   apt: "apartment buildings", comm: "commercial properties", land: "vacant lots", cpark: "parking/storage units" };
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -209,21 +291,19 @@ const median = a => { const s = a.filter(x => x != null && isFinite(x)).sort((x,
   const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const store = { get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } } };
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-// ---------- data ----------
+// ---------- data + search ----------
 let META = null, INDEX = [], BYPIN = new Map(), SEARCH = [];
 const shardCache = new Map();
 const ABBR = { STREET: "ST", AVENUE: "AVE", AV: "AVE", BOULEVARD: "BLVD", PLACE: "PL", ROAD: "RD", DRIVE: "DR", TERRACE: "TER",
   COURT: "CT", LANE: "LN", PLAZA: "PLZ", SQUARE: "SQ", PARKWAY: "PKWY", HIGHWAY: "HWY", NORTH: "N", SOUTH: "S", EAST: "E", WEST: "W",
   FIRST: "1ST", SECOND: "2ND", THIRD: "3RD", FOURTH: "4TH", FIFTH: "5TH", SIXTH: "6TH", SEVENTH: "7TH", EIGHTH: "8TH", NINTH: "9TH",
-  TENTH: "10TH", MC: "MC", SAINT: "ST", APT: "", UNIT: "" };
+  TENTH: "10TH", SAINT: "ST", APT: "", UNIT: "" };
 function tokens(s) {
   const out = [];
   for (let w of String(s).toUpperCase().replace(/[.,#'&]/g, " ").split(/\s+/)) {
-    if (!w) continue;
-    w = ABBR[w] ?? w;
-    if (!w) continue;
-    out.push(w);
+    if (!w) continue; w = ABBR[w] ?? w; if (!w) continue; out.push(w);
     const m = w.match(/^(\d+)-(\d+)$/);
     if (m) { out.push(m[1]); const lo = m[1], hi = m[2].length < lo.length ? lo.slice(0, lo.length - m[2].length) + m[2] : m[2]; out.push(hi);
       for (let n = +lo + 1; n < +hi && n - lo < 20; n++) out.push(String(n)); }
@@ -231,71 +311,187 @@ function tokens(s) {
   return out;
 }
 function unitLabel(u) { return u ? u.replace(/^C0*/, "Unit ").replace(/^Unit $/, "Unit 0") : ""; }
-
-async function boot() {
-  try {
-    const [m, idx] = await Promise.all([fetch("data/meta.json").then(r => r.json()), fetch("data/index.json").then(r => r.json())]);
-    META = m; INDEX = idx;
-    for (const r of INDEX) {
-      BYPIN.set(r[0], r);
-      SEARCH.push([tokens(r[1]).concat(r[2] ? [r[2], r[2].replace(/^C0*/, "")] : []), r]);
-    }
-    $("#status").textContent = `${INDEX.length.toLocaleString()} Jersey City properties. Type a house number and street.`;
-    const fromHash = decodeURIComponent(location.hash.slice(1));
-    const last = store.get("jctc:last", null);
-    const start = BYPIN.has(fromHash) ? fromHash : BYPIN.has(last) ? last : EXAMPLE_PIN;
-    if (BYPIN.has(start)) show(start, start === EXAMPLE_PIN && !BYPIN.has(fromHash) && !BYPIN.has(last));
-  } catch (e) {
-    $("#status").textContent = "The property list didn't load. Reload the page to try again.";
-  }
-}
-
 function search(q) {
-  const qt = tokens(q);
-  if (!qt.length) return [];
+  const qt = tokens(q); if (!qt.length) return [];
   const res = [];
   for (const [toks, r] of SEARCH) {
     let ok = true, score = 0;
-    for (const t of qt) {
-      let hit = false;
+    for (const t of qt) { let hit = false;
       for (const a of toks) { if (a === t) { hit = true; score += 2; break; } if (a.startsWith(t)) { hit = true; score += 1; } }
-      if (!hit) { ok = false; break; }
-    }
+      if (!hit) { ok = false; break; } }
     if (ok) { res.push([score - (r[2] ? 0.5 : 0), r]); if (res.length > 400) break; }
   }
   res.sort((a, b) => b[0] - a[0] || a[1][1].localeCompare(b[1][1]) || a[1][2].localeCompare(b[1][2]));
   return res.slice(0, 12).map(x => x[1]);
 }
-
-const q = $("#q"), list = $("#results");
-let timer = 0;
-q.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(renderResults, 120); });
-q.addEventListener("keydown", e => { if (e.key === "ArrowDown") { const b = list.querySelector("button"); if (b) { e.preventDefault(); b.focus(); } } });
-list.addEventListener("keydown", e => {
-  const items = [...list.querySelectorAll("button")], i = items.indexOf(document.activeElement);
-  if (e.key === "ArrowDown" && i < items.length - 1) { e.preventDefault(); items[i + 1].focus(); }
-  if (e.key === "ArrowUp") { e.preventDefault(); (i > 0 ? items[i - 1] : q).focus(); }
-});
-function renderResults() {
-  if (!INDEX.length) return;
-  const rs = search(q.value);
-  if (!q.value.trim()) { list.hidden = true; return; }
-  if (!rs.length) { list.hidden = true; $("#status").textContent = "No match. Try the house number and street name, e.g. 38 Jefferson."; return; }
-  $("#status").textContent = "";
-  list.innerHTML = rs.map(r => `<li><button type="button" data-pin="${esc(r[0])}"><span>${esc(r[1])}${r[2] ? " · " + esc(unitLabel(r[2])) : ""}</span>
-    <span class="r-type">${esc(TYPE_LABEL[r[3]] || "")}</span></button></li>`).join("");
-  list.hidden = false;
-}
-list.addEventListener("click", e => { const b = e.target.closest("button[data-pin]"); if (!b) return;
-  list.hidden = true; q.value = ""; show(b.dataset.pin, false); });
-
 async function detail(row) {
   const n = row[8];
   if (!shardCache.has(n)) shardCache.set(n, fetch(`data/shards/${n}.json`).then(r => r.json()));
   return (await shardCache.get(n))[row[0]];
 }
 
-// ---------- charts ----------
+// ---------- map (canvas, no tiles) ----------
+const MAP = (() => {
+  const cv = $("#map"), ctx = cv.getContext("2d");
+  const KX = 111.32 * Math.cos(40.72 * Math.PI / 180), KY = 111.32;
+  let n = 0, X, Y, BIN, ROWI, W = 0, H = 0, dpr = 1, metric = "tax";
+  let view = { cx: 0, cy: 0, s: 1 }, home = null, sel = -1, comps = [], cells = new Map(), raf = 0, t0 = performance.now(), intro = 0;
+  const CELL = 0.08;
+  const NB = [["Downtown", 40.7185, -74.0410], ["Journal Square", 40.7330, -74.0630], ["The Heights", 40.7495, -74.0470],
+    ["Greenville", 40.6990, -74.0890], ["Bergen-Lafayette", 40.7125, -74.0700], ["West Side", 40.7270, -74.0850],
+    ["Liberty State Park", 40.7045, -74.0560], ["Hudson River", 40.7300, -74.0150]];
+  const ramp = () => [0, 1, 2, 3, 4, 5].map(i => css(`--ramp-${i}`));
+  const BREAKS = { tax: null, chg: [0.25, 0.5, 0.65, 0.8, 1.0] };
+  function load(index) {
+    const rows = index.filter(r => r[10] != null);
+    n = rows.length; X = new Float32Array(n); Y = new Float32Array(n); BIN = new Uint8Array(n); ROWI = new Array(n);
+    rows.forEach((r, i) => { const lon = r[10] / 1e5 - 74.2, lat = r[11] / 1e5 + 40.6; X[i] = lon * KX; Y[i] = -lat * KY; ROWI[i] = r;
+      const k = Math.floor(X[i] / CELL) + "," + Math.floor(Y[i] / CELL); (cells.get(k) || cells.set(k, []).get(k)).push(i); });
+    const taxes = rows.map(r => r[6]).filter(v => v > 0).sort((a, b) => a - b);
+    BREAKS.tax = [0.2, 0.4, 0.6, 0.8, 0.95].map(q => taxes[Math.floor(q * (taxes.length - 1))]);
+    setMetric(metric); resize(); fit(false);
+  }
+  function setMetric(m) {
+    metric = m;
+    for (let i = 0; i < n; i++) {
+      const r = ROWI[i]; let v = null;
+      if (m === "tax") v = r[6]; else if (r[9] > 0 && r[6]) v = r[6] / r[9] - 1;
+      if (v == null || (m === "tax" && !(v > 0))) { BIN[i] = 255; continue; }
+      const br = BREAKS[m]; let b = 0; while (b < br.length && v >= br[b]) b++; BIN[i] = b;
+    }
+    const lab = m === "tax" ? ["$" + Math.round(BREAKS.tax[0] / 1000) + "k", "$" + Math.round(BREAKS.tax[2] / 1000) + "k", "$" + Math.round(BREAKS.tax[4] / 1000) + "k+"]
+      : ["< +25%", "+65%", "> +100%"];
+    $("#ramp").innerHTML = ramp().map(c => `<i style="background:${c}"></i>`).join("");
+    $("#ramp-labels").innerHTML = lab.map(l => `<span>${l}</span>`).join("");
+    document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.metric === m));
+    kick();
+  }
+  function resize() {
+    const r = cv.getBoundingClientRect(); dpr = Math.min(2, devicePixelRatio || 1);
+    W = r.width; H = r.height; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); kick();
+  }
+  function bounds() { // 0.5th–99.5th percentile, so a few stray parcels don't shrink the city
+    const xs = Float32Array.from(X).sort(), ys = Float32Array.from(Y).sort(), q = p => Math.floor(p * (n - 1));
+    return [xs[q(.005)], xs[q(.995)], ys[q(.005)], ys[q(.995)]]; }
+  function fit(animate = true) {
+    const [a, b, c, d] = bounds();
+    const s = Math.min((W - 60) / (b - a), (H - 50) / (d - c));
+    home = { cx: (a + b) / 2, cy: (c + d) / 2, s };
+    animate ? flyTo(home) : (view = { ...home }, kick());
+  }
+  const toScreen = (x, y) => [(x - view.cx) * view.s + W / 2, (y - view.cy) * view.s + H / 2];
+  const toWorld = (sx, sy) => [(sx - W / 2) / view.s + view.cx, (sy - H / 2) / view.s + view.cy];
+  function draw(now) {
+    raf = 0;
+    const r = ramp(), k = view.s;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = css("--map-bg"); ctx.fillRect(0, 0, W, H);
+    const size = Math.max(1.1, Math.min(7, k * 0.016));
+    const minX = view.cx - W / 2 / k - 0.05, maxX = view.cx + W / 2 / k + 0.05, minY = view.cy - H / 2 / k - 0.05, maxY = view.cy + H / 2 / k + 0.05;
+    const reveal = REDUCED ? 1 : Math.min(1, (now - t0) / 1400);
+    const order = [255, 0, 1, 2, 3, 4, 5];
+    for (const b of order) {
+      ctx.fillStyle = b === 255 ? "rgba(147,165,158,.28)" : r[b];
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        if (BIN[i] !== b) continue;
+        const x = X[i], y = Y[i];
+        if (x < minX || x > maxX || y < minY || y > maxY) continue;
+        if (reveal < 1 && ((i * 2654435761) % 1000) / 1000 > reveal) continue;
+        const sx = (x - view.cx) * k + W / 2, sy = (y - view.cy) * k + H / 2;
+        if (size > 3.5) { ctx.moveTo(sx + size / 2, sy); ctx.arc(sx, sy, size / 2, 0, 6.2832); } else ctx.rect(sx - size / 2, sy - size / 2, size, size);
+      }
+      ctx.fill();
+    }
+    // neighborhood labels at city scale
+    if (k < 260) {
+      ctx.font = "700 10.5px " + css("--font-body"); ctx.textAlign = "center"; ctx.lineJoin = "round";
+      ctx.strokeStyle = css("--map-bg"); ctx.lineWidth = 4; ctx.fillStyle = "rgba(233,241,237,.85)";
+      for (const [name, lat, lon] of NB) { const [sx, sy] = toScreen(lon * KX, -lat * KY), t = name.toUpperCase();
+        ctx.strokeText(t, sx, sy); ctx.fillText(t, sx, sy); }
+    }
+    // comparables and selection
+    if (comps.length) {
+      ctx.strokeStyle = css("--map-comp"); ctx.lineWidth = 1.5; ctx.globalAlpha = .85;
+      for (const i of comps) { const [sx, sy] = toScreen(X[i], Y[i]); ctx.beginPath(); ctx.arc(sx, sy, size / 2 + 4, 0, 7); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+    }
+    if (sel >= 0) {
+      const [sx, sy] = toScreen(X[sel], Y[sel]), ph = REDUCED ? 0 : ((now / 1400) % 1);
+      ctx.strokeStyle = css("--map-sel");
+      ctx.globalAlpha = 1 - ph; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(sx, sy, 8 + ph * 26, 0, 7); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(sx, sy, 8, 0, 7); ctx.stroke();
+      ctx.fillStyle = css("--map-sel"); ctx.beginPath(); ctx.arc(sx, sy, 3.5, 0, 7); ctx.fill();
+    }
+    if (reveal < 1 || (sel >= 0 && !REDUCED) || anim) kick();
+  }
+  function kick() { if (!raf) raf = requestAnimationFrame(t => { if (anim) step(t); draw(t); }); }
+  let anim = null;
+  function flyTo(target, dur = 1100) {
+    if (REDUCED) { view = { ...target }; kick(); return; }
+    anim = { from: { ...view }, to: target, t: performance.now(), dur }; kick();
+  }
+  function step(now) {
+    const p = Math.min(1, (now - anim.t) / anim.dur), e = p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+    const f = anim.from, to = anim.to, ls = Math.log(f.s) + (Math.log(to.s) - Math.log(f.s)) * e;
+    // zoom out a little mid-flight for a sense of travel
+    const dip = Math.sin(Math.PI * e) * Math.min(.9, Math.hypot(to.cx - f.cx, to.cy - f.cy) * .35);
+    view = { cx: f.cx + (to.cx - f.cx) * e, cy: f.cy + (to.cy - f.cy) * e, s: Math.exp(ls - dip) };
+    if (p >= 1) anim = null;
+  }
+  function pick(sx, sy) {
+    const [wx, wy] = toWorld(sx, sy), rad = Math.max(14, 8) / view.s;
+    let best = -1, bd = rad * rad;
+    const c0 = Math.floor((wx - rad) / CELL), c1 = Math.floor((wx + rad) / CELL), r0 = Math.floor((wy - rad) / CELL), r1 = Math.floor((wy + rad) / CELL);
+    for (let cx = c0; cx <= c1; cx++) for (let cy = r0; cy <= r1; cy++) for (const i of cells.get(cx + "," + cy) || []) {
+      const d = (X[i] - wx) ** 2 + (Y[i] - wy) ** 2; if (d < bd) { bd = d; best = i; } }
+    return best;
+  }
+  const idxOf = pin => ROWI.findIndex(r => r[0] === pin);
+  function select(pin, compPins = [], fly = true) {
+    sel = idxOf(pin);
+    const set = new Set(compPins); comps = []; for (let i = 0; i < n; i++) if (set.has(ROWI[i][0])) comps.push(i);
+    if (sel >= 0 && fly) {
+      let s = Math.max(view.s, 1400);
+      if (comps.length) { let m = 0; for (const i of comps) m = Math.max(m, Math.hypot(X[i] - X[sel], Y[i] - Y[sel]));
+        s = Math.max(500, Math.min(4000, Math.min(W, H) * 0.38 / Math.max(m, .05))); }
+      const narrow = W < 760, offX = narrow ? 0 : -Math.min(170, W * .14) / s;
+      flyTo({ cx: X[sel] - offX, cy: Y[sel] + (narrow ? 0 : 40 / s), s });
+    }
+    kick();
+  }
+  // interaction
+  const pts = new Map(); let last = null, moved = 0, pinch0 = null;
+  cv.addEventListener("pointerdown", e => { cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.offsetX, e.offsetY]); moved = 0; anim = null;
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch0 = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), s: view.s, c: toWorld((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) }; }
+    last = [e.offsetX, e.offsetY]; cv.classList.add("dragging"); });
+  cv.addEventListener("pointermove", e => {
+    if (!pts.has(e.pointerId)) { cv.style.cursor = pick(e.offsetX, e.offsetY) >= 0 ? "pointer" : ""; return; }
+    pts.set(e.pointerId, [e.offsetX, e.offsetY]);
+    if (pts.size === 2 && pinch0) { const [a, b] = [...pts.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      const s = Math.max(60, Math.min(9000, pinch0.s * d / pinch0.d)), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+      view = { s, cx: pinch0.c[0] - (mx - W / 2) / s, cy: pinch0.c[1] - (my - H / 2) / s }; moved += 10; kick(); return; }
+    const dx = e.offsetX - last[0], dy = e.offsetY - last[1]; moved += Math.abs(dx) + Math.abs(dy);
+    view.cx -= dx / view.s; view.cy -= dy / view.s; last = [e.offsetX, e.offsetY]; kick();
+  });
+  const end = e => { const wasTap = moved < 6 && pts.size === 1; pts.delete(e.pointerId); if (pts.size < 2) pinch0 = null;
+    if (!pts.size) cv.classList.remove("dragging");
+    if (wasTap && e.type === "pointerup") { const i = pick(e.offsetX, e.offsetY); if (i >= 0) onPick(ROWI[i][0]); } };
+  cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
+  cv.addEventListener("wheel", e => { e.preventDefault(); anim = null; const f = Math.exp(-e.deltaY * 0.0015), [wx, wy] = toWorld(e.offsetX, e.offsetY);
+    const s = Math.max(60, Math.min(9000, view.s * f)); view = { s, cx: wx - (e.offsetX - W / 2) / s, cy: wy - (e.offsetY - H / 2) / s }; kick(); }, { passive: false });
+  cv.addEventListener("dblclick", e => { const [wx, wy] = toWorld(e.offsetX, e.offsetY); flyTo({ cx: wx, cy: wy, s: Math.min(9000, view.s * 2.2) }, 600); });
+  $("#zin").onclick = () => flyTo({ ...view, s: Math.min(9000, view.s * 1.8) }, 450);
+  $("#zout").onclick = () => flyTo({ ...view, s: Math.max(60, view.s / 1.8) }, 450);
+  $("#zfit").onclick = () => fit(true);
+  document.querySelectorAll(".seg button").forEach(b => b.onclick = () => setMetric(b.dataset.metric));
+  new ResizeObserver(() => { const had = !!home; resize(); if (had && sel < 0) fit(false); }).observe(cv);
+  new MutationObserver(kick).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  let onPick = () => {};
+  return { load, select, fit, set onPick(f) { onPick = f; } };
+})();
+
+// ---------- charts (animated) ----------
 function niceTicks(lo, hi, n = 4) {
   const span = hi - lo || hi || 1, step0 = span / n, mag = 10 ** Math.floor(Math.log10(step0));
   const step = [1, 2, 2.5, 5, 10].map(s => s * mag).find(s => span / s <= n) || mag * 10;
@@ -304,12 +500,20 @@ function niceTicks(lo, hi, n = 4) {
   if (out[out.length - 1] < hi) out.push(out[out.length - 1] + step);
   return out;
 }
-function chartWidth(host) { return Math.max(300, Math.min(760, (host.clientWidth || 640) - 16)); }
+function chartWidth(host) { return Math.max(300, Math.min(780, (host.clientWidth || 640) - 16)); }
+function drawIn(host) {
+  if (REDUCED) return;
+  host.querySelectorAll(".line").forEach(p => { const L = p.getTotalLength(); p.style.strokeDasharray = L; p.style.strokeDashoffset = L; });
+  host.querySelectorAll(".area").forEach(a => a.style.opacity = 0);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    host.querySelectorAll(".line").forEach(p => p.style.strokeDashoffset = 0);
+    host.querySelectorAll(".area").forEach(a => a.style.opacity = 1);
+  }));
+}
 function lineChart(host, { labels, series, fmt = money }) {
   const W = chartWidth(host), H = W < 480 ? 210 : 250, L = 50, R = 16, T = 14, B = 28;
   const all = series.flatMap(s => s.values).filter(v => v != null);
-  const ticks = niceTicks(0, Math.max(...all) * 1.05);
-  const ymax = ticks[ticks.length - 1];
+  const ticks = niceTicks(0, Math.max(...all) * 1.05), ymax = ticks[ticks.length - 1];
   const x = i => L + (labels.length === 1 ? (W - L - R) / 2 : i * (W - L - R) / (labels.length - 1));
   const y = v => T + (H - T - B) * (1 - v / ymax);
   let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(series.map(z => z.name).join(" and "))} by year">`;
@@ -320,33 +524,29 @@ function lineChart(host, { labels, series, fmt = money }) {
   series.forEach((z, k) => {
     let d = "", pen = false;
     z.values.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? "L" : "M") + x(i) + " " + y(v); pen = true; });
-    if (k === 0) { // area under the primary series
-      const pts = z.values.map((v, i) => v == null ? null : [x(i), y(v)]).filter(Boolean);
-      if (pts.length > 1) s += `<path d="M${pts[0][0]} ${y(0)} ${pts.map(p => "L" + p[0] + " " + p[1]).join(" ")} L${pts[pts.length - 1][0]} ${y(0)}Z" fill="var(--c${k})" fill-opacity=".08"/>`;
-    }
-    s += `<path d="${d}" fill="none" stroke="var(--c${k})" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round" ${z.dash ? 'stroke-dasharray="5 4"' : ""}/>`;
+    if (k === 0) { const pts = z.values.map((v, i) => v == null ? null : [x(i), y(v)]).filter(Boolean);
+      if (pts.length > 1) s += `<path class="area" d="M${pts[0][0]} ${y(0)} ${pts.map(p => "L" + p[0] + " " + p[1]).join(" ")} L${pts[pts.length - 1][0]} ${y(0)}Z" fill="var(--c${k})" fill-opacity=".1"/>`; }
+    s += `<path class="line" d="${d}" fill="none" stroke="var(--c${k})" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
     const lastI = z.values.map((v, i) => v == null ? -1 : i).filter(i => i >= 0).pop();
-    if (lastI != null) s += `<circle cx="${x(lastI)}" cy="${y(z.values[lastI])}" r="4.5" fill="var(--c${k})" stroke="var(--surface)" stroke-width="2"/>`;
+    if (lastI != null) s += `<circle cx="${x(lastI)}" cy="${y(z.values[lastI])}" r="5" fill="var(--c${k})" stroke="var(--surface-2)" stroke-width="2"/>`;
   });
-  s += `<line class="xh" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/>`;
-  s += `<rect x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="transparent" class="hit"/></svg>`;
+  s += `<line class="xh" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/></svg>`;
   const legend = series.length > 1 ? `<div class="legend">${series.map((z, k) => `<span style="--c:var(--c${k})">${esc(z.name)}</span>`).join("")}</div>` : "";
   host.innerHTML = legend + s + `<div class="tip" hidden></div>`;
   series.forEach((z, k) => host.style.setProperty(`--c${k}`, z.color));
   const svg = host.querySelector("svg"), tip = host.querySelector(".tip"), xh = host.querySelector(".xh");
   const move = e => {
-    const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) * W / r.width;
+    const r = svg.getBoundingClientRect(), hr = host.getBoundingClientRect(), px = (e.clientX - r.left) * W / r.width;
     const i = Math.max(0, Math.min(labels.length - 1, Math.round((px - L) / ((W - L - R) / Math.max(1, labels.length - 1)))));
     xh.setAttribute("x1", x(i)); xh.setAttribute("x2", x(i)); xh.setAttribute("visibility", "visible");
     tip.innerHTML = `<b>${esc(labels[i])}</b>` + series.map(z => `<br>${esc(z.name)}: ${fmt(z.values[i])}`).join("");
     const top = Math.min(...series.map(z => z.values[i]).filter(v => v != null).map(y));
-    tip.style.left = (x(i) * r.width / W + (r.left - host.getBoundingClientRect().left)) + "px";
-    tip.style.top = (isFinite(top) ? top * r.height / H : 20) + (r.top - host.getBoundingClientRect().top) + "px";
-    tip.hidden = false;
+    tip.style.left = (x(i) * r.width / W + r.left - hr.left) + "px";
+    tip.style.top = (isFinite(top) ? top * r.height / H : 20) + (r.top - hr.top) + "px"; tip.hidden = false;
   };
-  svg.addEventListener("pointermove", move);
-  svg.addEventListener("pointerdown", move);
+  svg.addEventListener("pointermove", move); svg.addEventListener("pointerdown", move);
   svg.addEventListener("pointerleave", () => { tip.hidden = true; xh.setAttribute("visibility", "hidden"); });
+  drawIn(host);
 }
 function barChart(host, { labels, values, estimate = [], color }) {
   const W = chartWidth(host), H = W < 480 ? 190 : 220, L = 50, R = 10, T = 14, B = 30;
@@ -358,11 +558,9 @@ function barChart(host, { labels, values, estimate = [], color }) {
   for (const t of ticks) s += `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${L - 8}" y="${y(t) + 4}" text-anchor="end">${kmoney(t)}</text>`;
   values.forEach((v, i) => {
     const x0 = L + i * bw + 3, w = Math.max(4, bw - 6);
-    if (v != null && v > 0) {
-      const top = y(v), h = y(0) - top, r = Math.min(4, w / 2, h);
-      s += `<path d="M${x0} ${y(0)} V${top + r} Q${x0} ${top} ${x0 + r} ${top} H${x0 + w - r} Q${x0 + w} ${top} ${x0 + w} ${top + r} V${y(0)} Z"
-        fill="${estimate[i] ? "url(#hatch)" : "var(--c0)"}" data-i="${i}"/>`;
-    }
+    if (v != null && v > 0) { const top = y(v), r = Math.min(4, w / 2, y(0) - top);
+      s += `<path class="bar" style="--i:${i}" d="M${x0} ${y(0)} V${top + r} Q${x0} ${top} ${x0 + r} ${top} H${x0 + w - r} Q${x0 + w} ${top} ${x0 + w} ${top + r} V${y(0)} Z"
+        fill="${estimate[i] ? "url(#hatch)" : "var(--c0)"}" data-i="${i}"/>`; }
     if (W >= 480 || labels[i].startsWith("Q1") || labels.length <= 6) s += `<text x="${x0 + w / 2}" y="${H - 10}" text-anchor="middle">${esc(W >= 480 ? labels[i] : labels[i].startsWith("Q1") ? labels[i].slice(3) : labels[i])}</text>`;
     s += `<rect x="${L + i * bw}" y="${T}" width="${bw}" height="${H - T - B}" fill="transparent" data-i="${i}"/>`;
   });
@@ -377,20 +575,46 @@ function barChart(host, { labels, values, estimate = [], color }) {
   svg.addEventListener("pointerover", over); svg.addEventListener("pointerdown", over);
   svg.addEventListener("pointerleave", () => { tip.hidden = true; });
 }
-
-// ---------- property view ----------
-async function show(pin, isExample) {
-  const row = BYPIN.get(pin); if (!row) return;
-  const el = $("#prop");
-  el.innerHTML = `<p class="muted">Loading ${esc(row[1])}…</p>`;
-  let d;
-  try { d = await detail(row); } catch { el.innerHTML = `<p>The details for this property didn't load. Try again.</p>`; return; }
-  if (!d) { el.innerHTML = `<p>No billing details found for this property.</p>`; return; }
-  if (!isExample) { store.set("jctc:last", pin); try { history.replaceState(null, "", "#" + pin); } catch {} }
-  current = [row, d, isExample];
-  render(el, row, d, isExample);
+function countUp(root) {
+  if (REDUCED) return;
+  root.querySelectorAll(".kpi .v").forEach(el => {
+    const m = el.textContent.trim().match(/^([+−-]?)(\$?)([\d,]+(?:\.\d+)?)(%?)$/); if (!m) return;
+    const target = parseFloat(m[3].replace(/,/g, "")), dec = (m[3].split(".")[1] || "").length, t = performance.now();
+    const fmt = v => m[1] + m[2] + v.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec }) + m[4];
+    const tick = now => { const p = Math.min(1, (now - t) / 900), e = 1 - Math.pow(1 - p, 3); el.textContent = fmt(target * e); if (p < 1) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  });
 }
 
+// ---------- property view ----------
+let current = null;
+async function show(pin, isExample, opts = {}) {
+  const row = BYPIN.get(pin); if (!row) return;
+  const el = $("#prop");
+  let d;
+  try { d = await detail(row); } catch { el.innerHTML = `<p class="note">The details for this property didn't load. Try again.</p>`; return; }
+  if (!d) { el.innerHTML = `<p class="note">No billing details found for this property.</p>`; return; }
+  if (!isExample) { store.set("jctc:last", pin); try { history.replaceState(null, "", "#" + pin); } catch {} }
+  current = [row, d, isExample];
+  MAP.select(pin, d.c || [], opts.fly !== false);
+  peek(row, d);
+  render(el, row, d, isExample);
+  if (opts.scroll) $("#prop").scrollIntoView({ behavior: REDUCED ? "auto" : "smooth" });
+}
+function peek(row, d) {
+  const ch = row[5] && row[6] ? row[6] / row[5] - 1 : null, long = row[9] && row[6] ? row[6] / row[9] - 1 : null;
+  const html = `<div class="peek glass" role="region" aria-label="Selected property">
+    <span class="k">${esc(TYPE_LABEL[row[3]] || "Property")}</span>
+    <div class="addr">${esc(row[1])}${row[2] ? `, ${esc(unitLabel(row[2]))}` : ""}</div>
+    <div class="row"><span><span class="k">2026 tax</span><span class="v">${money(row[6])}</span></span>
+      <span><span class="k">vs 2025</span><span class="v up">${pct(ch)}</span></span>
+      <span><span class="k">since 2019</span><span class="v up">${pct(long, 0)}</span></span></div>
+    ${d.c ? `<span class="k">Rings show the ${d.c.length} most similar nearby properties</span>` : ""}
+    <a href="#prop" id="peek-go">See the full report ↓</a></div>`;
+  const narrow = innerWidth <= 760;
+  $("#peek-desk").innerHTML = narrow ? "" : html; $("#peek-mob").innerHTML = narrow ? html : "";
+  const go = $("#peek-go"); if (go) go.onclick = e => { e.preventDefault(); $("#prop").scrollIntoView({ behavior: REDUCED ? "auto" : "smooth" }); };
+}
 function render(el, row, d, isExample) {
   const years = META.years, h = d.h, type = row[3];
   const firstI = h.findIndex(v => v != null && v > 0), lastI = years.length - 1;
@@ -398,16 +622,11 @@ function render(el, row, d, isExample) {
   const blk = row[0].split("_");
   const h1 = qv(d, 2026, 1) + qv(d, 2026, 2), h2 = qv(d, 2026, 3) + qv(d, 2026, 4);
   const comps = (d.c || []).map(p => BYPIN.get(p)).filter(Boolean);
-  const facts = [
-    ["Block / lot", `${blk[1]} / ${blk[2]}${blk[3] ? " / " + blk[3] : ""}`],
-    ["Assessed 2026", money(row[4])],
-    d.yb ? ["Built", d.yb] : null,
-    d.lotsf ? ["Lot", `${d.lotsf.toLocaleString()} sq ft`] : null,
-  ].filter(Boolean);
-
+  const facts = [["Block / lot", `${blk[1]} / ${blk[2]}${blk[3] ? " / " + blk[3] : ""}`], ["Assessed 2026", money(row[4])],
+    d.yb ? ["Built", d.yb] : null, d.lotsf ? ["Lot", `${d.lotsf.toLocaleString()} sq ft`] : null].filter(Boolean);
   el.innerHTML = `
-  <div class="prop-head">
-    ${isExample ? `<span class="example-chip">Example property. Search above for yours.</span>` : ""}
+  <div class="prop-head anim" style="--i:0">
+    ${isExample ? `<span class="example-chip">Example property · search or tap the map for yours</span>` : ""}
     <span class="eyebrow">${esc(TYPE_LABEL[type] || "Property")}</span>
     <h2>${esc(row[1])}${row[2] ? `, ${esc(unitLabel(row[2]))}` : ""}</h2>
     <div class="facts">${facts.map(([k, v]) => `<span>${esc(k)}: <b>${esc(v)}</b></span>`).join("")}</div>
@@ -419,20 +638,29 @@ function render(el, row, d, isExample) {
       <div class="kpi"><span class="k">2026 2nd half vs 1st</span><span class="v">${h1 && h2 ? pct(h2 / h1 - 1, 0) : "–"}</span>
         <span class="d muted">${h1 && h2 ? money(h1) + " → " + money(h2) : "no quarterly bills"}</span></div>
     </div>
-    <nav class="jump" aria-label="Sections"><a href="#s-details">Details &amp; links</a><a href="#s-history">Tax history</a><a href="#s-compare">Similar nearby</a>
-      <a href="#s-appeal">Appeal check</a><a href="#s-plan">Appeal plan</a></nav>
   </div>
-  <section class="block" id="s-details"></section>
-  <section class="block" id="s-history"></section>
-  <section class="block" id="s-compare"></section>
-  <section class="block" id="s-appeal"></section>
-  <section class="block" id="s-plan"></section>`;
-
+  <nav class="tabs" aria-label="Sections"><a href="#s-details">Details</a><a href="#s-history">Tax history</a><a href="#s-compare">Nearby</a>
+    <a href="#s-appeal">Appeal check</a><a href="#s-plan">Appeal plan</a></nav>
+  <section class="block anim" style="--i:1" id="s-details"></section>
+  <section class="block anim" style="--i:2" id="s-history"></section>
+  <section class="block anim" style="--i:3" id="s-compare"></section>
+  <section class="block anim" style="--i:4" id="s-appeal"></section>
+  <section class="block anim" style="--i:5" id="s-plan"></section>`;
   renderDetails($("#s-details", el), row, d);
   renderHistory($("#s-history", el), row, d);
   renderCompare($("#s-compare", el), row, d, comps);
   renderAppeal($("#s-appeal", el), row, d);
   renderPlan($("#s-plan", el), row);
+  countUp(el);
+  spy(el);
+}
+let spyObs = null;
+function spy(el) {
+  if (spyObs) spyObs.disconnect();
+  const tabs = [...el.querySelectorAll(".tabs a")];
+  spyObs = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) tabs.forEach(a => a.classList.toggle("on", a.getAttribute("href") === "#" + e.target.id)); }),
+    { rootMargin: "-30% 0px -60% 0px" });
+  el.querySelectorAll("section.block").forEach(s => spyObs.observe(s));
 }
 
 function qv(d, y, qq) { return (d.q && d.q[(y - 2025) * 4 + qq - 1]) || 0; }
@@ -721,8 +949,50 @@ function renderPlan(sec, row) {
   count();
 }
 
-let lastW = innerWidth, current = null;
-addEventListener("resize", () => { if (Math.abs(innerWidth - lastW) > 80 && current) { lastW = innerWidth; render($("#prop"), ...current); } });
+
+
+// ---------- search UI ----------
+const q = $("#q"), list = $("#results");
+let timer = 0;
+q.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(renderResults, 110); });
+q.addEventListener("keydown", e => { if (e.key === "ArrowDown") { const b = list.querySelector("button"); if (b) { e.preventDefault(); b.focus(); } }
+  if (e.key === "Enter") { const b = list.querySelector("button"); if (b) { e.preventDefault(); b.click(); } } });
+list.addEventListener("keydown", e => {
+  const items = [...list.querySelectorAll("button")], i = items.indexOf(document.activeElement);
+  if (e.key === "ArrowDown" && i < items.length - 1) { e.preventDefault(); items[i + 1].focus(); }
+  if (e.key === "ArrowUp") { e.preventDefault(); (i > 0 ? items[i - 1] : q).focus(); } });
+function renderResults() {
+  if (!INDEX.length) return;
+  if (!q.value.trim()) { list.hidden = true; $("#status").textContent = ""; return; }
+  const rs = search(q.value);
+  if (!rs.length) { list.hidden = true; $("#status").textContent = "No match. Try the house number and street, e.g. 38 Jefferson."; return; }
+  $("#status").textContent = "";
+  list.innerHTML = rs.map((r, i) => `<li style="--i:${i}"><button type="button" data-pin="${esc(r[0])}"><span>${esc(r[1])}${r[2] ? " · " + esc(unitLabel(r[2])) : ""}</span>
+    <span class="r-type">${esc(TYPE_LABEL[r[3]] || "")}</span></button></li>`).join("");
+  list.hidden = false;
+}
+list.addEventListener("click", e => { const b = e.target.closest("button[data-pin]"); if (!b) return;
+  list.hidden = true; q.value = ""; q.blur(); show(b.dataset.pin, false); });
+MAP.onPick = pin => show(pin, false);
+
+let lastW = innerWidth;
+addEventListener("resize", () => { if (Math.abs(innerWidth - lastW) > 80 && current) { lastW = innerWidth; peek(current[0], current[1]); render($("#prop"), ...current); } });
+
+async function boot() {
+  try {
+    const [m, idx] = await Promise.all([fetch("data/meta.json").then(r => r.json()), fetch("data/index.json").then(r => r.json())]);
+    META = m; INDEX = idx;
+    for (const r of INDEX) { BYPIN.set(r[0], r); SEARCH.push([tokens(r[1]).concat(r[2] ? [r[2], r[2].replace(/^C0*/, "")] : []), r]); }
+    $("#status").textContent = "";
+    MAP.load(INDEX);
+    const fromHash = decodeURIComponent(location.hash.slice(1)), last = store.get("jctc:last", null);
+    const start = BYPIN.has(fromHash) ? fromHash : BYPIN.has(last) ? last : EXAMPLE_PIN;
+    const isEx = !BYPIN.has(fromHash) && !BYPIN.has(last);
+    if (BYPIN.has(start)) setTimeout(() => show(start, isEx, { fly: !isEx }), REDUCED ? 0 : 1500);
+  } catch (e) {
+    $("#status").textContent = "The property list didn't load. Reload the page to try again.";
+  }
+}
 boot();
 })();
 </script>

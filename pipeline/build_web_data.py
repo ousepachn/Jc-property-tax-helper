@@ -286,16 +286,21 @@ def main():
         sh = shard_of(pin)
         shards[sh][pin] = rec
         t25, t26, a25 = acc.at[i, "t25"], acc.at[i, "t26"], acc.at[i, "a25"]
+        t19 = T[0, i]
+        # map position as integers: 1e-5 degrees from (-74.2, 40.6); null when the parcel isn't mapped
+        mx = None if math.isnan(xs[i]) else round((ll[i][1] + 74.2) * 1e5)
+        my = None if math.isnan(xs[i]) else round((ll[i][0] - 40.6) * 1e5)
         index_rows.append([pin, tidy_address(acc.at[i, "property_location"]), unit_of(pin), TYPE_CODES.get(t, t),
                            int(av), None if pd.isna(t25) else round(t25), None if pd.isna(t26) else round(t26),
-                           None if pd.isna(a25) else int(a25), sh])
+                           None if pd.isna(a25) else int(a25), sh, None if np.isnan(t19) else round(t19), mx, my])
 
     for sh, recs in shards.items():
         (out / "shards" / f"{sh}.json").write_text(json.dumps(recs, separators=(",", ":")))
     (out / "index.json").write_text(json.dumps(index_rows, separators=(",", ":")))
     meta = {
         "built": date.today().isoformat(), "years": YEARS, "assessment_years": MODIV_YEARS, "rates": RATES,
-        "index_fields": ["pin", "address", "unit", "type", "assessed_2026", "tax_2025", "tax_2026", "assessed_2025", "shard"],
+        "index_fields": ["pin", "address", "unit", "type", "assessed_2026", "tax_2025", "tax_2026", "assessed_2025", "shard",
+                         "tax_2019", "map_x", "map_y"],
         "city_ratio_official": args.city_ratio, "city_sales_ratio": round(city_sales_ratio, 3) if city_sales_ratio else None,
         "sales_used": len(ratios), "sales_from": SALES_FROM.strftime("%Y-%m-%d"), "n_shards": N_SHARDS,
     }
