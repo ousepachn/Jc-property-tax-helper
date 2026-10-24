@@ -121,6 +121,16 @@ SCHEMAS = {
     'Day': [('a', 'prim'), ('b', 'prim'), ('c', 'prim')],
 }
 
+# Classes the client also sends but whose fields we don't use (utility, PILOT and NNJ lien accounts).
+# Only their layout matters, to keep the reader aligned: s = string, p = primitive, o = object.
+_POSITIONAL = {
+    'UtilAcct': 'spssspspooppoppopoppspoppppooooooooooooppppppppppppppppppppppppppppppppppppppppppppppppoooooooooooopppppppppppppppppppppppppppoospspooppopposppoppppoooooooooooopppppppppppppppppppppppppppppppppppppppppppppooooooooopppppppppppppppppppppssssssspsoopspooppoppopoppsppoppppooooooooooooppppppppppppppppppppppppppppppppppppppppppppppppoooooooooooopppppppppppppppppppppppppppppspooppoppopoppspoppppooooooooooooppppppppppppppppppppppppppppppppppppppppppppppppooooooooooooppppppppppppppppppppppppppp',
+    'PilotAcct': 'sssspsospssosoospsssssssspppoosssspppop',
+    'NNJLienAcct': 'sppssppsppopsssssssspps',
+}
+_KIND = {"s": "string", "p": "prim", "o": "object"}
+SCHEMAS.update({cls: [(f"f{i}", _KIND[k]) for i, k in enumerate(kinds)] for cls, kinds in _POSITIONAL.items()})
+
 
 class GwtReader:
     """Minimal GWT-RPC v7 object-stream reader for the classes in SCHEMAS."""

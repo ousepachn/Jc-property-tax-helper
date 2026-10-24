@@ -191,3 +191,13 @@ def test_wipp_lien_flags_and_details():
     assert a.lien_open_balance == 1843.26
     from portals.models import delinquency_level
     assert delinquency_level(0, a.lien_count, a.pending_tax_sale) == "lien"
+
+
+def test_wipp_account_with_utility_account():
+    # Union City accounts that also have a water/sewer account embed a UtilAcct (490 fields)
+    key = "    8        3               "
+    res = parse_account((FIX / "wipp_0910_8_3_util.txt").read_text(), key, "0910", "wipp:0910")
+    a = res.account
+    assert a.pin == "0910_8_3" and a.property_class == "2" and a.net_taxable == 259600
+    assert a.owner_name == "OWNER NAME"
+    assert len(res.bills) == 16 and {b.kind for b in res.bills} == {"tax", "credit"}
