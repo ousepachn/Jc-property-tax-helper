@@ -79,6 +79,7 @@ def test_name_rules(name, expected):
     ("0905_1_1", "4C", None, "apartment_5plus"),
     ("0905_1_2", "4A", None, "commercial"),
     ("0905_194_47", "1", None, "vacant_land"),
+    ("0906_11_2_C0P12", "1", None, "condo_parking_or_land"),
     ("0905_1_15", "15F", None, "exempt"),
     ("0905_102_25", "", None, "no_class_on_file"),
 ])
@@ -92,3 +93,9 @@ def test_newest_lien_year():
     assert newest_lien_year('[{"sale_date": "1985-10-30"}, {"sale_date": "2025-12-17"}]') == 2025
     assert newest_lien_year('[{"sale_date": null}]') == 0
     assert newest_lien_year("") == 0
+
+
+def test_lien_holder_counts():
+    from analyze_delinquency import lien_holder_counts
+    liens = ['[{"holder": "CITY OF JERSEY CITY"}, {"holder": "US BANK CUST FOR TOWER DB"}]', '[{"holder": ""}]', ""]
+    assert lien_holder_counts(liens) == {"municipality": 1, "investor": 1, "unknown": 1}

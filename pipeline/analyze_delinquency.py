@@ -19,6 +19,7 @@ Writes (owner names appear only in delinquent_properties.csv):
 import argparse
 import csv
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -33,7 +34,8 @@ SEVERITY_ORDER = ["current", "1_quarter", "2_3_quarters", "4plus_quarters", "lie
 OWNER_ORDER = ["owner_occupied", "individual_investor", "small_llc", "corporate", "trust_estate",
                "public_nonprofit", "unknown"]
 PROPERTY_ORDER = ["condo", "single_family", "two_to_four_family", "home_units_unknown", "apartment_5plus", "commercial",
-                  "vacant_land", "exempt", "no_class_on_file", "other"]
+                  "vacant_land", "condo_parking_or_land", "exempt", "no_class_on_file", "other"]
+PUBLIC_HOLDER = re.compile(r"\b(CITY|TOWN|TOWNSHIP|BOROUGH|MUNICIPAL\w*|COUNTY)\b")
 RECENT_LIEN_YEARS = 5   # liens sold within this many years count as recent; older ones are legacy city-held liens
 
 
@@ -46,7 +48,8 @@ def property_type(pin, prop_class, dwellings):
     if cls.startswith("15"):
         return "exempt"
     if cls == "1":
-        return "vacant_land"
+        # class 1 condo sub-units (C/P qualifiers) are parking spaces, storage or not-yet-built units
+        return "condo_parking_or_land" if qualifier[:1] in ("C", "P") else "vacant_land"
     if cls in ("4A", "4B"):
         return "commercial"
     if cls == "4C":
@@ -68,6 +71,20 @@ def newest_lien_year(liens_json):
     except (ValueError, TypeError, AttributeError):
         return 0
     return max(years, default=0)
+
+
+def lien_holder_counts(liens_jsons):
+    """Open liens by holder: the town itself vs. private investors (who bought the certificate)."""
+    counts = {"municipality": 0, "investor": 0, "unknown": 0}
+    for j in liens_jsons:
+        try:
+            liens = json.loads(j or "[]")
+        except ValueError:
+            continue
+        for lien in liens:
+            holder = (lien.get("holder") or "").upper().strip()
+            counts["unknown" if not holder else "municipality" if PUBLIC_HOLDER.search(holder) else "investor"] += 1
+    return counts
 
 
 def load_dwellings(modiv_csv, county_district):
@@ -189,6 +206,7 @@ def main():
         "properties_with_open_liens": int(known.has_lien.sum()),
         f"properties_with_lien_sold_in_last_{RECENT_LIEN_YEARS}_years": int(known.has_recent_lien.sum()),
         "lien_open_balance_total_$": round(float(known.lien_open_balance.sum()), 2),
+        "open_liens_by_holder": lien_holder_counts(known.get("liens_json", pd.Series(dtype=str))),
         "delinquent_with_existing_lien": int((known.delinquent & known.has_lien).sum()),
         "in_tax_sale": int(known.tax_sale.sum()),
         "in_bankruptcy": int(known.in_bankruptcy.sum()),
