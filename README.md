@@ -108,6 +108,22 @@ python pipeline/validate_portal.py              # compare against the MOD-IV 202
   accounts fetched earlier without owners are backfilled. If the repo is public it collects no owner
   fields, exports with `--redact-owners`, and puts a warning in the run summary.
 
+## Owner-facing web page (`web/`)
+
+`web/index.html` is a single static page for Jersey City owners: search by address, tax history 2019–2026
+(with what drove each year's change: the city rate vs. the property's own assessment), the 2026 first-half vs
+second-half bill jump, a comparison with similar properties nearby (same type, similar assessment, within
+half a mile), a 2027 appeal check (Chapter 123 ratio 66.69%, range 56.69–76.69%, nearby recorded sales) and an
+appeal-preparation plan with deadlines, checklist and contacts.
+
+```
+python pipeline/build_web_data.py --export <hls export dir> --out web/data   # ~90 s, ~58 MB of JSON
+python -m http.server -d web 8000                                            # then open localhost:8000
+```
+
+The data files hold public tax-roll fields only (address, class, assessments, bills, recorded sales): no owner
+names, mailing addresses or delinquency data.
+
 ## Sources
 
 | Source | What it has | How current |

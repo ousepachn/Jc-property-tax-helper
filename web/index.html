@@ -1,0 +1,647 @@
+<title>Jersey City Tax Check</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+<style>
+/* Layout: one civic-document column; search on top, property sections stacked, each a plain titled block. */
+:root {
+  --bg: #f3f5f2; --surface: #ffffff; --ink: #17211d; --muted: #5a6661; --line: #dde3df; --grid: #e8ece9;
+  --accent: #0d6b57; --accent-ink: #ffffff; --accent-soft: #e2f0eb;
+  --series-1: #2a78d6; --series-2: #eb6834;
+  --good: #2d7a3e; --good-soft: #e5f2e7; --warn: #9a5b00; --warn-soft: #fbf0dc; --bad: #b3261e; --bad-soft: #fbe6e4;
+  --font-display: "Bricolage Grotesque", "Public Sans", system-ui, sans-serif;
+  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --step--1: .84rem; --step-0: 1rem; --step-1: 1.2rem; --step-2: 1.5rem; --step-3: 2rem;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121614; --surface: #1a201d; --ink: #e8eeea; --muted: #a0aca6; --line: #2d3632; --grid: #26302b;
+  --accent: #5cc2a5; --accent-ink: #0b1a15; --accent-soft: #1b2e27;
+  --series-1: #3987e5; --series-2: #d95926;
+  --good: #7cc98b; --good-soft: #1b2b1f; --warn: #e5b45e; --warn-soft: #2e2617; --bad: #f08a82; --bad-soft: #321b19;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #121614; --surface: #1a201d; --ink: #e8eeea; --muted: #a0aca6; --line: #2d3632; --grid: #26302b;
+  --accent: #5cc2a5; --accent-ink: #0b1a15; --accent-soft: #1b2e27;
+  --series-1: #3987e5; --series-2: #d95926;
+  --good: #7cc98b; --good-soft: #1b2b1f; --warn: #e5b45e; --warn-soft: #2e2617; --bad: #f08a82; --bad-soft: #321b19;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 var(--step-0)/1.55 var(--font-body); }
+.wrap { max-width: 780px; margin: 0 auto; padding-block: 20px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: var(--step-3); letter-spacing: -.01em; }
+h2 { font-size: var(--step-2); }
+h3 { font-size: var(--step-1); }
+p { margin: 0; }
+a { color: var(--accent); }
+.eyebrow { font-size: var(--step--1); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.muted { color: var(--muted); }
+.small { font-size: var(--step--1); }
+.num { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+/* masthead + search */
+.mast { display: grid; gap: 8px; margin-bottom: 18px; }
+.mast p { max-width: 62ch; color: var(--muted); }
+.search { position: relative; }
+.search label { display: block; font-weight: 600; margin-bottom: 6px; }
+.search input { width: 100%; font: inherit; font-size: 1.05rem; padding: 12px 14px; border-radius: 10px;
+  border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); }
+.search input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+.results { list-style: none; margin: 6px 0 0; padding: 0; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 10px; overflow: hidden; }
+.results li button { all: unset; box-sizing: border-box; display: flex; justify-content: space-between; gap: 12px; width: 100%;
+  padding: 10px 14px; cursor: pointer; border-top: 1px solid var(--line); }
+.results li:first-child button { border-top: 0; }
+.results li button:hover, .results li button:focus-visible { background: var(--accent-soft); }
+.results .r-type { color: var(--muted); font-size: var(--step--1); white-space: nowrap; }
+.status-line { margin-top: 8px; font-size: var(--step--1); color: var(--muted); min-height: 1.4em; }
+
+/* property header */
+.prop { margin-top: 22px; display: grid; gap: 28px; }
+.prop-head { display: grid; gap: 10px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.example-chip { justify-self: start; font-size: var(--step--1); font-weight: 600; padding: 3px 10px; border-radius: 99px;
+  background: var(--warn-soft); color: var(--warn); }
+.facts { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: var(--step--1); color: var(--muted); }
+.facts b { color: var(--ink); font-weight: 600; }
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 420px) { .kpi { padding: 10px; } .kpi .v { font-size: 1.2rem; } }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; min-width: 0; }
+.kpi .k { display: block; font-size: var(--step--1); color: var(--muted); }
+.kpi .v { display: block; font-family: var(--font-display); font-size: 1.45rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kpi .d { font-size: var(--step--1); font-weight: 600; }
+.up { color: var(--bad); } .down { color: var(--good); }
+.jump { display: flex; flex-wrap: wrap; gap: 8px; }
+.jump a { font-size: var(--step--1); font-weight: 600; text-decoration: none; padding: 6px 12px; border-radius: 99px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.jump a:hover { border-color: var(--accent); color: var(--accent); }
+
+/* sections */
+section.block { display: grid; gap: 14px; scroll-margin-top: 12px; }
+.block > header { display: grid; gap: 4px; }
+.note { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-size: .95rem; }
+.note.spike { background: var(--warn-soft); border-color: transparent; }
+.verdict { border-radius: 12px; padding: 14px; display: grid; gap: 6px; }
+.verdict.good { background: var(--good-soft); } .verdict.warn { background: var(--warn-soft); } .verdict.bad { background: var(--bad-soft); }
+.verdict.neutral { background: var(--surface); border: 1px solid var(--line); }
+.pill { justify-self: start; font-size: var(--step--1); font-weight: 700; padding: 2px 10px; border-radius: 99px; background: var(--surface); }
+.verdict.good .pill { color: var(--good); } .verdict.warn .pill { color: var(--warn); } .verdict.bad .pill { color: var(--bad); }
+
+/* charts */
+.chart { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 8px 6px; position: relative; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart text { fill: var(--muted); font: 500 11px var(--font-body); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; padding: 0 8px 6px; font-size: var(--step--1); color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 6px;
+  vertical-align: middle; background: var(--c); }
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); font-size: var(--step--1);
+  padding: 6px 9px; border-radius: 8px; white-space: nowrap; transform: translate(-50%, -110%); line-height: 1.35; }
+.tip[hidden] { display: none; }
+
+/* tables */
+.tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { font-size: var(--step--1); color: var(--muted); font-weight: 600; white-space: nowrap; }
+td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chip { display: inline-block; font-size: .72rem; font-weight: 700; padding: 1px 7px; border-radius: 99px; margin-left: 6px;
+  background: var(--warn-soft); color: var(--warn); vertical-align: 1px; }
+.chip.bad { background: var(--bad-soft); color: var(--bad); }
+
+/* appeal */
+.valuebox { display: grid; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+.valuebox label { font-weight: 600; }
+.valuebox .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.valuebox input { font: inherit; font-size: 1.05rem; width: 12em; max-width: 100%; padding: 9px 12px; border-radius: 8px;
+  border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); font-variant-numeric: tabular-nums; }
+.range { position: relative; height: 34px; margin: 6px 4px 18px; }
+.range .band { position: absolute; top: 12px; height: 10px; border-radius: 5px; background: var(--good-soft); border: 1px solid var(--good); }
+.range .axis { position: absolute; top: 16px; left: 0; right: 0; height: 2px; background: var(--line); }
+.range .mark { position: absolute; top: 4px; width: 3px; height: 26px; border-radius: 2px; background: var(--ink); transform: translateX(-1px); }
+.range .lab { position: absolute; top: 32px; font-size: .72rem; color: var(--muted); transform: translateX(-50%); white-space: nowrap; }
+
+.sales { list-style: none; padding: 0; margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.sales li { padding: 10px 14px; border-top: 1px solid var(--line); display: grid; gap: 6px; }
+.sales li:first-child { border-top: 0; }
+.s-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; }
+.s-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.s-nums .k { display: block; font-size: .72rem; font-weight: 500; color: var(--muted); }
+/* plan */
+.timeline { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; }
+.timeline li { display: grid; grid-template-columns: 7.5em 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.timeline li:last-child { border-bottom: 0; }
+.timeline .when { font-weight: 700; font-variant-numeric: tabular-nums; }
+.timeline .past .when, .timeline .past { color: var(--muted); }
+.timeline .nowline { color: var(--accent); }
+.checklist { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.checklist li { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+  display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
+.checklist input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--accent); }
+.checklist .t { font-weight: 600; }
+.checklist .h { font-size: .9rem; color: var(--muted); }
+.checklist li.done .t { text-decoration: line-through; color: var(--muted); }
+.progress { font-size: var(--step--1); color: var(--muted); }
+.contacts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.contacts .note { display: grid; gap: 2px; }
+.contacts .sel { user-select: all; }
+footer.foot { margin-top: 36px; padding-top: 14px; border-top: 1px solid var(--line); font-size: var(--step--1); color: var(--muted); display: grid; gap: 6px; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="wrap">
+  <header class="mast">
+    <span class="eyebrow">Jersey City property tax</span>
+    <h1>Jersey City Tax Check</h1>
+    <p>Look up any Jersey City property to see how its tax changed since 2019, how it compares with similar
+      properties nearby, and whether an assessment appeal for 2027 may be worth it.</p>
+  </header>
+
+  <div class="search" role="search">
+    <label for="q">Find a property</label>
+    <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="Street address, e.g. 313 New York Ave" aria-controls="results">
+    <ul id="results" class="results" hidden></ul>
+    <div id="status" class="status-line" aria-live="polite">Loading property list…</div>
+  </div>
+
+  <div id="prop" class="prop"></div>
+
+  <footer class="foot">
+    <p>Sources: Jersey City tax billing portal (bills for 2019–2026, collected October 2026), NJ MOD-IV tax lists 2021–2026
+      (assessments and recorded sales), NJ Division of Taxation tax-rate history and Chapter 123 ratios, NJOGIS parcel map.
+      Owner names are not used.</p>
+    <p>This page explains public records. It is not legal or tax advice; confirm figures with the Tax Assessor before filing.</p>
+  </footer>
+</div>
+
+<script>
+(() => {
+"use strict";
+// ---------- constants (sources in the appeal-plan section) ----------
+const RATIO = { year: 2027, avg: 0.6669, lo: 0.5669, hi: 0.7669, prevAvg: 0.7282 };
+const RATE_2026 = 2.657; // per $100
+const EXAMPLE_PIN = "0906_10201_16"; // a typical 2–4 family home, shown until the viewer searches
+const TYPE_LABEL = { condo: "Condo", "1fam": "Single-family home", "2-4fam": "2–4 family home", home: "Home",
+  apt: "Apartment building (5+ units)", comm: "Commercial", land: "Vacant land", cpark: "Condo parking / storage",
+  exempt: "Tax-exempt", none: "Unclassified", other: "Other" };
+const TYPE_PLURAL = { condo: "condos", "1fam": "single-family homes", "2-4fam": "2–4 family homes", home: "homes",
+  apt: "apartment buildings", comm: "commercial properties", land: "vacant lots", cpark: "parking/storage units" };
+
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const money = v => v == null || isNaN(v) ? "–" : (v < 0 ? "−$" : "$") + Math.abs(Math.round(v)).toLocaleString("en-US");
+const kmoney = v => v >= 1e6 ? "$" + (v / 1e6).toFixed(v >= 1e7 ? 1 : 2) + "M" : v >= 1e4 ? "$" + Math.round(v / 1e3) + "k" : money(v);
+const pct = (v, d = 1) => v == null || !isFinite(v) ? "–" : (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v * 100).toFixed(d) + "%";
+const median = a => { const s = a.filter(x => x != null && isFinite(x)).sort((x, y) => x - y); if (!s.length) return null;
+  const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+const store = { get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } } };
+
+// ---------- data ----------
+let META = null, INDEX = [], BYPIN = new Map(), SEARCH = [];
+const shardCache = new Map();
+const ABBR = { STREET: "ST", AVENUE: "AVE", AV: "AVE", BOULEVARD: "BLVD", PLACE: "PL", ROAD: "RD", DRIVE: "DR", TERRACE: "TER",
+  COURT: "CT", LANE: "LN", PLAZA: "PLZ", SQUARE: "SQ", PARKWAY: "PKWY", HIGHWAY: "HWY", NORTH: "N", SOUTH: "S", EAST: "E", WEST: "W",
+  FIRST: "1ST", SECOND: "2ND", THIRD: "3RD", FOURTH: "4TH", FIFTH: "5TH", SIXTH: "6TH", SEVENTH: "7TH", EIGHTH: "8TH", NINTH: "9TH",
+  TENTH: "10TH", MC: "MC", SAINT: "ST", APT: "", UNIT: "" };
+function tokens(s) {
+  const out = [];
+  for (let w of String(s).toUpperCase().replace(/[.,#'&]/g, " ").split(/\s+/)) {
+    if (!w) continue;
+    w = ABBR[w] ?? w;
+    if (!w) continue;
+    out.push(w);
+    const m = w.match(/^(\d+)-(\d+)$/);
+    if (m) { out.push(m[1]); const lo = m[1], hi = m[2].length < lo.length ? lo.slice(0, lo.length - m[2].length) + m[2] : m[2]; out.push(hi);
+      for (let n = +lo + 1; n < +hi && n - lo < 20; n++) out.push(String(n)); }
+  }
+  return out;
+}
+function unitLabel(u) { return u ? u.replace(/^C0*/, "Unit ").replace(/^Unit $/, "Unit 0") : ""; }
+
+async function boot() {
+  try {
+    const [m, idx] = await Promise.all([fetch("data/meta.json").then(r => r.json()), fetch("data/index.json").then(r => r.json())]);
+    META = m; INDEX = idx;
+    for (const r of INDEX) {
+      BYPIN.set(r[0], r);
+      SEARCH.push([tokens(r[1]).concat(r[2] ? [r[2], r[2].replace(/^C0*/, "")] : []), r]);
+    }
+    $("#status").textContent = `${INDEX.length.toLocaleString()} Jersey City properties. Type a house number and street.`;
+    const fromHash = decodeURIComponent(location.hash.slice(1));
+    const last = store.get("jctc:last", null);
+    const start = BYPIN.has(fromHash) ? fromHash : BYPIN.has(last) ? last : EXAMPLE_PIN;
+    if (BYPIN.has(start)) show(start, start === EXAMPLE_PIN && !BYPIN.has(fromHash) && !BYPIN.has(last));
+  } catch (e) {
+    $("#status").textContent = "The property list didn't load. Reload the page to try again.";
+  }
+}
+
+function search(q) {
+  const qt = tokens(q);
+  if (!qt.length) return [];
+  const res = [];
+  for (const [toks, r] of SEARCH) {
+    let ok = true, score = 0;
+    for (const t of qt) {
+      let hit = false;
+      for (const a of toks) { if (a === t) { hit = true; score += 2; break; } if (a.startsWith(t)) { hit = true; score += 1; } }
+      if (!hit) { ok = false; break; }
+    }
+    if (ok) { res.push([score - (r[2] ? 0.5 : 0), r]); if (res.length > 400) break; }
+  }
+  res.sort((a, b) => b[0] - a[0] || a[1][1].localeCompare(b[1][1]) || a[1][2].localeCompare(b[1][2]));
+  return res.slice(0, 12).map(x => x[1]);
+}
+
+const q = $("#q"), list = $("#results");
+let timer = 0;
+q.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(renderResults, 120); });
+q.addEventListener("keydown", e => { if (e.key === "ArrowDown") { const b = list.querySelector("button"); if (b) { e.preventDefault(); b.focus(); } } });
+list.addEventListener("keydown", e => {
+  const items = [...list.querySelectorAll("button")], i = items.indexOf(document.activeElement);
+  if (e.key === "ArrowDown" && i < items.length - 1) { e.preventDefault(); items[i + 1].focus(); }
+  if (e.key === "ArrowUp") { e.preventDefault(); (i > 0 ? items[i - 1] : q).focus(); }
+});
+function renderResults() {
+  if (!INDEX.length) return;
+  const rs = search(q.value);
+  if (!q.value.trim()) { list.hidden = true; return; }
+  if (!rs.length) { list.hidden = true; $("#status").textContent = "No match. Try the house number and street name, e.g. 38 Jefferson."; return; }
+  $("#status").textContent = "";
+  list.innerHTML = rs.map(r => `<li><button type="button" data-pin="${esc(r[0])}"><span>${esc(r[1])}${r[2] ? " · " + esc(unitLabel(r[2])) : ""}</span>
+    <span class="r-type">${esc(TYPE_LABEL[r[3]] || "")}</span></button></li>`).join("");
+  list.hidden = false;
+}
+list.addEventListener("click", e => { const b = e.target.closest("button[data-pin]"); if (!b) return;
+  list.hidden = true; q.value = ""; show(b.dataset.pin, false); });
+
+async function detail(row) {
+  const n = row[8];
+  if (!shardCache.has(n)) shardCache.set(n, fetch(`data/shards/${n}.json`).then(r => r.json()));
+  return (await shardCache.get(n))[row[0]];
+}
+
+// ---------- charts ----------
+function niceTicks(lo, hi, n = 4) {
+  const span = hi - lo || hi || 1, step0 = span / n, mag = 10 ** Math.floor(Math.log10(step0));
+  const step = [1, 2, 2.5, 5, 10].map(s => s * mag).find(s => span / s <= n) || mag * 10;
+  const t0 = Math.floor(lo / step) * step, out = [];
+  for (let v = t0; v <= hi + step * 0.001; v += step) out.push(+v.toFixed(6));
+  if (out[out.length - 1] < hi) out.push(out[out.length - 1] + step);
+  return out;
+}
+function chartWidth(host) { return Math.max(300, Math.min(760, (host.clientWidth || 640) - 16)); }
+function lineChart(host, { labels, series, fmt = money }) {
+  const W = chartWidth(host), H = W < 480 ? 210 : 250, L = 50, R = 16, T = 14, B = 28;
+  const all = series.flatMap(s => s.values).filter(v => v != null);
+  const ticks = niceTicks(0, Math.max(...all) * 1.05);
+  const ymax = ticks[ticks.length - 1];
+  const x = i => L + (labels.length === 1 ? (W - L - R) / 2 : i * (W - L - R) / (labels.length - 1));
+  const y = v => T + (H - T - B) * (1 - v / ymax);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(series.map(z => z.name).join(" and "))} by year">`;
+  for (const t of ticks) s += `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)" stroke-width="1"/>
+    <text x="${L - 8}" y="${y(t) + 4}" text-anchor="end">${kmoney(t)}</text>`;
+  const every = W < 420 && labels.length > 6 ? 2 : 1;
+  labels.forEach((l, i) => { if (i % every === 0 || i === labels.length - 1) s += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${esc(every > 1 ? "’" + l.slice(2) : l)}</text>`; });
+  series.forEach((z, k) => {
+    let d = "", pen = false;
+    z.values.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? "L" : "M") + x(i) + " " + y(v); pen = true; });
+    if (k === 0) { // area under the primary series
+      const pts = z.values.map((v, i) => v == null ? null : [x(i), y(v)]).filter(Boolean);
+      if (pts.length > 1) s += `<path d="M${pts[0][0]} ${y(0)} ${pts.map(p => "L" + p[0] + " " + p[1]).join(" ")} L${pts[pts.length - 1][0]} ${y(0)}Z" fill="var(--c${k})" fill-opacity=".08"/>`;
+    }
+    s += `<path d="${d}" fill="none" stroke="var(--c${k})" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round" ${z.dash ? 'stroke-dasharray="5 4"' : ""}/>`;
+    const lastI = z.values.map((v, i) => v == null ? -1 : i).filter(i => i >= 0).pop();
+    if (lastI != null) s += `<circle cx="${x(lastI)}" cy="${y(z.values[lastI])}" r="4.5" fill="var(--c${k})" stroke="var(--surface)" stroke-width="2"/>`;
+  });
+  s += `<line class="xh" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/>`;
+  s += `<rect x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="transparent" class="hit"/></svg>`;
+  const legend = series.length > 1 ? `<div class="legend">${series.map((z, k) => `<span style="--c:var(--c${k})">${esc(z.name)}</span>`).join("")}</div>` : "";
+  host.innerHTML = legend + s + `<div class="tip" hidden></div>`;
+  series.forEach((z, k) => host.style.setProperty(`--c${k}`, z.color));
+  const svg = host.querySelector("svg"), tip = host.querySelector(".tip"), xh = host.querySelector(".xh");
+  const move = e => {
+    const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) * W / r.width;
+    const i = Math.max(0, Math.min(labels.length - 1, Math.round((px - L) / ((W - L - R) / Math.max(1, labels.length - 1)))));
+    xh.setAttribute("x1", x(i)); xh.setAttribute("x2", x(i)); xh.setAttribute("visibility", "visible");
+    tip.innerHTML = `<b>${esc(labels[i])}</b>` + series.map(z => `<br>${esc(z.name)}: ${fmt(z.values[i])}`).join("");
+    const top = Math.min(...series.map(z => z.values[i]).filter(v => v != null).map(y));
+    tip.style.left = (x(i) * r.width / W + (r.left - host.getBoundingClientRect().left)) + "px";
+    tip.style.top = (isFinite(top) ? top * r.height / H : 20) + (r.top - host.getBoundingClientRect().top) + "px";
+    tip.hidden = false;
+  };
+  svg.addEventListener("pointermove", move);
+  svg.addEventListener("pointerdown", move);
+  svg.addEventListener("pointerleave", () => { tip.hidden = true; xh.setAttribute("visibility", "hidden"); });
+}
+function barChart(host, { labels, values, estimate = [], color }) {
+  const W = chartWidth(host), H = W < 480 ? 190 : 220, L = 50, R = 10, T = 14, B = 30;
+  const ticks = niceTicks(0, Math.max(...values.filter(v => v != null)) * 1.08), ymax = ticks[ticks.length - 1];
+  const bw = (W - L - R) / labels.length, y = v => T + (H - T - B) * (1 - v / ymax);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Quarterly tax bills">
+    <defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+    <rect width="6" height="6" fill="var(--c0)" fill-opacity=".25"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--c0)" stroke-width="2"/></pattern></defs>`;
+  for (const t of ticks) s += `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${L - 8}" y="${y(t) + 4}" text-anchor="end">${kmoney(t)}</text>`;
+  values.forEach((v, i) => {
+    const x0 = L + i * bw + 3, w = Math.max(4, bw - 6);
+    if (v != null && v > 0) {
+      const top = y(v), h = y(0) - top, r = Math.min(4, w / 2, h);
+      s += `<path d="M${x0} ${y(0)} V${top + r} Q${x0} ${top} ${x0 + r} ${top} H${x0 + w - r} Q${x0 + w} ${top} ${x0 + w} ${top + r} V${y(0)} Z"
+        fill="${estimate[i] ? "url(#hatch)" : "var(--c0)"}" data-i="${i}"/>`;
+    }
+    if (W >= 480 || labels[i].startsWith("Q1") || labels.length <= 6) s += `<text x="${x0 + w / 2}" y="${H - 10}" text-anchor="middle">${esc(W >= 480 ? labels[i] : labels[i].startsWith("Q1") ? labels[i].slice(3) : labels[i])}</text>`;
+    s += `<rect x="${L + i * bw}" y="${T}" width="${bw}" height="${H - T - B}" fill="transparent" data-i="${i}"/>`;
+  });
+  host.innerHTML = s + `</svg><div class="tip" hidden></div>`;
+  host.style.setProperty("--c0", color);
+  const svg = host.querySelector("svg"), tip = host.querySelector(".tip");
+  const over = e => { const i = e.target.dataset && e.target.dataset.i; if (i == null) return;
+    const r = svg.getBoundingClientRect(), hr = host.getBoundingClientRect();
+    tip.innerHTML = `<b>${esc(labels[i])}</b><br>${money(values[i])}${estimate[i] ? " (estimated bill)" : ""}`;
+    tip.style.left = ((L + (+i + .5) * bw) * r.width / W + r.left - hr.left) + "px";
+    tip.style.top = (y(values[i] || 0) * r.height / H + r.top - hr.top) + "px"; tip.hidden = false; };
+  svg.addEventListener("pointerover", over); svg.addEventListener("pointerdown", over);
+  svg.addEventListener("pointerleave", () => { tip.hidden = true; });
+}
+
+// ---------- property view ----------
+async function show(pin, isExample) {
+  const row = BYPIN.get(pin); if (!row) return;
+  const el = $("#prop");
+  el.innerHTML = `<p class="muted">Loading ${esc(row[1])}…</p>`;
+  let d;
+  try { d = await detail(row); } catch { el.innerHTML = `<p>The details for this property didn't load. Try again.</p>`; return; }
+  if (!d) { el.innerHTML = `<p>No billing details found for this property.</p>`; return; }
+  if (!isExample) { store.set("jctc:last", pin); try { history.replaceState(null, "", "#" + pin); } catch {} }
+  current = [row, d, isExample];
+  render(el, row, d, isExample);
+}
+
+function render(el, row, d, isExample) {
+  const years = META.years, h = d.h, type = row[3];
+  const firstI = h.findIndex(v => v != null && v > 0), lastI = years.length - 1;
+  const t26 = h[lastI], t25 = h[lastI - 1];
+  const blk = row[0].split("_");
+  const h1 = qv(d, 2026, 1) + qv(d, 2026, 2), h2 = qv(d, 2026, 3) + qv(d, 2026, 4);
+  const comps = (d.c || []).map(p => BYPIN.get(p)).filter(Boolean);
+  const facts = [
+    ["Block / lot", `${blk[1]} / ${blk[2]}${blk[3] ? " / " + blk[3] : ""}`],
+    ["Assessed 2026", money(row[4])],
+    d.land || d.impr ? ["Land + building", `${kmoney(d.land)} + ${kmoney(d.impr)}`] : null,
+    d.yb ? ["Built", d.yb] : null,
+    d.bd ? ["Building", d.bd] : null,
+    d.sale ? ["Last recorded sale", `${money(d.sale[1])} (${fmtDate(d.sale[0])})`] : null,
+  ].filter(Boolean);
+
+  el.innerHTML = `
+  <div class="prop-head">
+    ${isExample ? `<span class="example-chip">Example property. Search above for yours.</span>` : ""}
+    <span class="eyebrow">${esc(TYPE_LABEL[type] || "Property")}</span>
+    <h2>${esc(row[1])}${row[2] ? `, ${esc(unitLabel(row[2]))}` : ""}</h2>
+    <div class="facts">${facts.map(([k, v]) => `<span>${esc(k)}: <b>${esc(v)}</b></span>`).join("")}</div>
+    <div class="kpis">
+      <div class="kpi"><span class="k">2026 tax</span><span class="v">${money(t26)}</span>
+        <span class="d ${t26 > t25 ? "up" : "down"}">${t25 ? pct(t26 / t25 - 1) + " vs 2025" : ""}</span></div>
+      <div class="kpi"><span class="k">Since ${years[firstI] ?? 2019}</span><span class="v">${firstI >= 0 && h[firstI] ? pct(t26 / h[firstI] - 1, 0) : "–"}</span>
+        <span class="d muted">${firstI >= 0 ? money(h[firstI]) + " → " + money(t26) : ""}</span></div>
+      <div class="kpi"><span class="k">2026 2nd half vs 1st</span><span class="v">${h1 && h2 ? pct(h2 / h1 - 1, 0) : "–"}</span>
+        <span class="d muted">${h1 && h2 ? money(h1) + " → " + money(h2) : "no quarterly bills"}</span></div>
+    </div>
+    <nav class="jump" aria-label="Sections"><a href="#s-history">Tax history</a><a href="#s-compare">Similar nearby</a>
+      <a href="#s-appeal">Appeal check</a><a href="#s-plan">Appeal plan</a></nav>
+  </div>
+  <section class="block" id="s-history"></section>
+  <section class="block" id="s-compare"></section>
+  <section class="block" id="s-appeal"></section>
+  <section class="block" id="s-plan"></section>`;
+
+  renderHistory($("#s-history", el), row, d);
+  renderCompare($("#s-compare", el), row, d, comps);
+  renderAppeal($("#s-appeal", el), row, d);
+  renderPlan($("#s-plan", el), row);
+}
+
+function qv(d, y, qq) { return (d.q && d.q[(y - 2025) * 4 + qq - 1]) || 0; }
+function fmtDate(iso) { const [y, m, dd] = iso.split("-"); return new Date(+y, m - 1, +dd).toLocaleDateString("en-US", { month: "short", year: "numeric" }); }
+
+function renderHistory(sec, row, d) {
+  const years = META.years, h = d.h, rates = META.rates;
+  const rows = [];
+  let biggest = null;
+  years.forEach((y, i) => {
+    const v = h[i], p = i > 0 ? h[i - 1] : null;
+    const ch = v != null && p ? v / p - 1 : null;
+    const rch = i > 0 ? rates[y] / rates[years[i - 1]] - 1 : null;
+    const other = ch != null ? (1 + ch) / (1 + rch) - 1 : null;
+    if (ch != null && (!biggest || ch > biggest.ch)) biggest = { y, ch, rch, other };
+    rows.push({ y, v, ch, rch, other });
+  });
+  const spikes = rows.filter(r => r.ch != null && r.ch >= 0.15);
+  const adj = d.adj || [];
+  const qlabels = [], qvals = [], qest = [];
+  for (const y of [2025, 2026, 2027]) for (const qq of [1, 2, 3, 4]) {
+    const v = d.q ? d.q[(y - 2025) * 4 + qq - 1] : null; if (v == null) continue;
+    qlabels.push(`Q${qq} ’${String(y).slice(2)}`); qvals.push(v); qest.push(y === 2027);
+  }
+  const h1 = qv(d, 2026, 1) + qv(d, 2026, 2), h2 = qv(d, 2026, 3) + qv(d, 2026, 4);
+
+  sec.innerHTML = `<header><span class="eyebrow">1 · Your tax history</span><h3>How your tax changed since ${years[0]}</h3></header>
+    <div class="chart" id="c-hist"></div>
+    ${biggest && biggest.ch >= 0.15 ? `<div class="note spike"><b>Biggest jump: ${biggest.y}, ${pct(biggest.ch)}.</b> ${explain(biggest)}</div>` : ""}
+    <div class="tablewrap"><table>
+      <thead><tr><th>Year</th><th class="r">Tax billed</th><th class="r">Change</th><th>Why</th></tr></thead>
+      <tbody>${rows.map(r => `<tr><td>${r.y}${r.ch != null && r.ch >= 0.15 ? `<span class="chip ${r.ch >= .3 ? "bad" : ""}">spike</span>` : ""}</td>
+        <td class="r">${money(r.v)}</td><td class="r">${r.ch == null ? "–" : pct(r.ch)}</td>
+        <td class="small">${r.ch == null ? "" : driver(r)}</td></tr>`).join("")}</tbody></table></div>
+    ${adj.length ? `<p class="small muted">Appeal or board adjustments on this account: ${adj.map(([y, v]) => `${y}: ${money(v)}`).join(", ")}.
+      A negative amount is a credit, usually from a successful appeal.</p>` : ""}
+    ${qvals.length ? `<h3 style="margin-top:6px">Quarterly bills</h3>
+      <div class="chart" id="c-q"></div>
+      <div class="note">${h1 && h2 ? `Your Q3 and Q4 2026 bills total ${money(h2)}, ${Math.round((h2 / h1 - 1) * 100)}% more than the first half (${money(h1)}).
+        Jersey City's first-half bills are estimates based on last year's tax. The full 2026 increase (a rate of ${META.rates[2026]} per $100, up from ${META.rates[2025]})
+        is collected in the second half, so August and November take the whole jump.` : ""}
+        ${qv(d, 2027, 1) ? ` The hatched bars are the 2027 first-half bills already issued; they are estimates and will be adjusted once the 2027 rate is set.` : ""}</div>` : ""}`;
+  lineChart($("#c-hist", sec), { labels: years.map(String), series: [{ name: "Your tax", values: h, color: "var(--series-1)" }] });
+  if (qvals.length) barChart($("#c-q", sec), { labels: qlabels, values: qvals, estimate: qest, color: "var(--series-1)" });
+}
+function driver(r) {
+  if (Math.abs(r.ch) < 0.02) return "About the same";
+  const rateShare = Math.abs(r.rch) >= 0.02, otherShare = Math.abs(r.other) >= 0.03;
+  if (rateShare && !otherShare) return `City rate ${pct(r.rch, 0)}`;
+  if (!rateShare && otherShare) return `This property (assessment or exemptions) ${pct(r.other, 0)}`;
+  return `City rate ${pct(r.rch, 0)}; this property ${pct(r.other, 0)}`;
+}
+function explain(b) {
+  const parts = [];
+  if (Math.abs(b.rch) >= 0.02) parts.push(`Jersey City's tax rate changed ${pct(b.rch)} that year${b.y === 2022 ? ", mostly from the school tax increase" : ""}.`);
+  if (Math.abs(b.other) >= 0.03) parts.push(b.other > 0
+    ? `The rest (about ${pct(b.other, 0)}) came from this property: a higher assessment, a lost exemption or abatement, or added assessments for new work.`
+    : `This property's own assessment or exemptions offset about ${pct(-b.other, 0)} of it.`);
+  else parts.push("This property's assessment barely changed, so the rate explains nearly all of it.");
+  return parts.join(" ");
+}
+
+function renderCompare(sec, row, d, comps) {
+  const years = META.years, type = row[3];
+  if (!comps.length || !d.cm) {
+    sec.innerHTML = `<header><span class="eyebrow">2 · Similar nearby</span><h3>Compared with similar properties</h3></header>
+      <p class="note">There aren't enough similar properties nearby to compare this one with.</p>`; return; }
+  const mine = d.h, med = d.cm;
+  const myCh = mine[7] && mine[6] ? mine[7] / mine[6] - 1 : null;
+  const chs = comps.map(c => c[6] && c[5] ? c[6] / c[5] - 1 : null);
+  const medCh = median(chs);
+  const fi = mine.findIndex((v, i) => v && med[i]);
+  const myLong = fi >= 0 ? mine[7] / mine[fi] - 1 : null, medLong = fi >= 0 && med[7] ? med[7] / med[fi] - 1 : null;
+  const taxes = comps.map(c => c[6]).filter(Boolean).sort((a, b) => a - b);
+  const rank = taxes.filter(t => t < mine[7]).length / Math.max(1, taxes.length);
+  const miles = d.cr <= 0.8 ? "half a mile" : "a mile", nComps = d.cn || comps.length;
+  const word = TYPE_PLURAL[type] || "properties";
+  sec.innerHTML = `<header><span class="eyebrow">2 · Similar nearby</span><h3>Compared with ${nComps} similar ${esc(word)} within ${miles}</h3>
+    <p class="small muted">Same property type, assessed between two-thirds and one-and-a-half times your assessment. The table lists the ${Math.min(10, comps.length)} closest.</p></header>
+    <div class="kpis">
+      <div class="kpi"><span class="k">You, 2025 → 2026</span><span class="v">${pct(myCh)}</span></div>
+      <div class="kpi"><span class="k">Nearby median, 2025 → 2026</span><span class="v">${pct(medCh)}</span></div>
+      <div class="kpi"><span class="k">You since ${years[fi]}</span><span class="v">${pct(myLong, 0)}</span><span class="d muted">nearby ${pct(medLong, 0)}</span></div>
+    </div>
+    <div class="chart" id="c-cmp"></div>
+    <div class="note">${compareText(myCh, medCh, rank, word)}</div>
+    <div class="tablewrap"><table><thead><tr><th>Property</th><th class="r">2025</th><th class="r">2026</th><th class="r">Change</th></tr></thead>
+    <tbody>${comps.slice(0, 10).map(c => `<tr><td>${esc(c[1])}<br><span class="small muted">${c[2] ? esc(unitLabel(c[2])) + " · " : ""}assessed ${kmoney(c[4])}</span></td>
+      <td class="r">${money(c[5])}</td><td class="r">${money(c[6])}</td><td class="r">${c[5] && c[6] ? pct(c[6] / c[5] - 1) : "–"}</td></tr>`).join("")}</tbody></table></div>`;
+  lineChart($("#c-cmp", sec), { labels: years.map(String), series: [
+    { name: "This property", values: mine, color: "var(--series-1)" },
+    { name: `Similar nearby (median of ${d.cn || comps.length})`, values: med, color: "var(--series-2)" }] });
+}
+function compareText(my, med, rank, word) {
+  if (my == null || med == null) return "Not enough history to compare.";
+  const diff = my - med;
+  let s = Math.abs(diff) < 0.03 ? `Your 2026 increase is in line with similar ${word} nearby.`
+    : diff > 0 ? `Your 2026 increase was ${(diff * 100).toFixed(0)} points higher than similar ${word} nearby. If your assessment didn't change, ask the Tax Assessor why; an unexplained jump on one property is a reason to look closer.`
+    : `Your 2026 increase was ${(-diff * 100).toFixed(0)} points lower than similar ${word} nearby.`;
+  s += ` Your 2026 tax is higher than ${Math.round(rank * 100)}% of them.`;
+  return s;
+}
+
+function renderAppeal(sec, row, d) {
+  const A = row[4], type = row[3];
+  const head = `<header><span class="eyebrow">3 · Appeal check for ${RATIO.year}</span><h3>Could an appeal lower your assessment?</h3></header>`;
+  if (!A || type === "exempt") { sec.innerHTML = head + `<p class="note">This property has no taxable assessment to appeal.</p>`; return; }
+  const loV = A / RATIO.hi, hiV = A / RATIO.lo, midV = A / RATIO.avg;
+  const sales = (d.s || []).map(s => ({ row: BYPIN.get(s[0]), date: s[1], price: s[2], av: s[3], km: s[4] })).filter(s => s.row);
+  const ratios = sales.map(s => s.av / s.price);
+  const medRatio = median(ratios);
+  const estV = medRatio ? Math.round(A / medRatio / 1000) * 1000 : Math.round(midV / 1000) * 1000;
+  let v = sales.length ? estV : null;
+  const a25 = row[7];
+  const assessJump = a25 ? A / a25 - 1 : null;
+
+  let signal;
+  if (sales.length < 3) signal = { cls: "neutral", pill: "Not enough nearby sales", text: `We found fewer than 3 recent sales of similar ${TYPE_PLURAL[type] || "properties"} nearby. You will need to find comparable sales yourself (see the plan below).` };
+  else if (medRatio > RATIO.hi) signal = { cls: "good", pill: "Worth a closer look", text: `Similar nearby properties that sold were assessed at a median ${(medRatio * 100).toFixed(0)}% of their sale price, above the ${(RATIO.hi * 100).toFixed(2)}% upper limit for ${RATIO.year}. If yours is like them, your assessment may be too high.` };
+  else if (medRatio > RATIO.avg) signal = { cls: "warn", pill: "Borderline", text: `Similar nearby sales were assessed at a median ${(medRatio * 100).toFixed(0)}% of their sale price: above Jersey City's ${(RATIO.avg * 100).toFixed(2)}% average but inside the allowed range. An appeal works only if your own value is clearly lower.` };
+  else signal = { cls: "bad", pill: "Unlikely", text: `Similar nearby sales were assessed at a median ${(medRatio * 100).toFixed(0)}% of their sale price, at or below the city average. Unless your property has problems those sales didn't, an appeal is unlikely to succeed.` };
+
+  sec.innerHTML = head + `
+    <div class="note">For ${RATIO.year}, the state set Jersey City's average ratio at <b>${(RATIO.avg * 100).toFixed(2)}%</b>
+      (down from ${(RATIO.prevAvg * 100).toFixed(2)}% for 2026). An assessment is left alone if it is between
+      <b>${(RATIO.lo * 100).toFixed(2)}%</b> and <b>${(RATIO.hi * 100).toFixed(2)}%</b> of what the property was worth on <b>October 1, 2026</b>.
+      Above that range, the board resets it to market value × ${(RATIO.avg * 100).toFixed(2)}%.</div>
+    <div class="verdict ${signal.cls}"><span class="pill">${signal.pill}</span><p>${signal.text}</p>
+      ${assessJump != null && assessJump > 0.05 ? `<p><b>Your assessment rose ${pct(assessJump, 0)} from 2025 to 2026</b> without a city-wide revaluation. Ask the assessor what changed (new work, an added assessment, or a correction).</p>` : ""}</div>
+    <div class="valuebox">
+      <label for="mv">What was this property worth on October 1, 2026?</label>
+      <div class="row"><input id="mv" inputmode="numeric" value="${v ? v.toLocaleString("en-US") : ""}" placeholder="e.g. ${Math.round(midV / 1000) * 1000}">
+        <span class="small muted">${v ? "Pre-filled from the nearby sales below. Change it to your own estimate." : "Enter your estimate."}</span></div>
+      <div class="range" id="rng"></div>
+      <div id="mv-out"></div>
+    </div>
+    <p class="small muted">Your ${money(A)} assessment is in range if the property was worth between <b>${money(loV)}</b> and <b>${money(hiV)}</b> on October 1, 2026.
+      If it was worth <b>less than ${money(loV)}</b>, you likely qualify for a reduction.</p>
+    ${sales.length ? `<h3 style="margin-top:4px">Recent sales of similar properties nearby</h3>
+    <ul class="sales">${sales.map(s => `<li><div class="s-top"><b>${esc(s.row[1])}${s.row[2] ? ", " + esc(unitLabel(s.row[2])) : ""}</b>
+        <span class="small muted">${(s.km * 0.621).toFixed(2)} mi · sold ${fmtDate(s.date)}</span></div>
+        <div class="s-nums"><span><span class="k">Price</span>${money(s.price)}</span><span><span class="k">Assessed</span>${money(s.av)}</span>
+        <span><span class="k">Assessed ÷ price</span>${(s.av / s.price * 100).toFixed(0)}%${s.av / s.price > RATIO.hi ? `<span class="chip">above range</span>` : ""}</span></div></li>`).join("")}</ul>
+    <p class="small muted">Sales from July 2024 through 2025 in the state's tax list, filtered to look like normal market sales. A board wants 3–5 arm's-length
+      sales close to October 1, 2026; check each one and add newer sales (see the plan).</p>` : ""}`;
+
+  const input = $("#mv", sec), out = $("#mv-out", sec), rng = $("#rng", sec);
+  const update = () => {
+    const val = +String(input.value).replace(/[^0-9.]/g, "");
+    if (!val) { out.innerHTML = ""; rng.innerHTML = ""; return; }
+    const ratio = A / val, inRange = ratio <= RATIO.hi && ratio >= RATIO.lo;
+    const newA = val * RATIO.avg, save = (A - newA) * RATE_2026 / 100;
+    const lo = Math.min(loV, val) * 0.85, hi = Math.max(hiV, val) * 1.05, X = z => ((z - lo) / (hi - lo) * 100).toFixed(2) + "%";
+    rng.innerHTML = `<div class="axis"></div><div class="band" style="left:${X(loV)};width:calc(${X(hiV)} - ${X(loV)})"></div>
+      <div class="mark" style="left:${X(val)}"></div><span class="lab" style="left:${X(loV)}">${kmoney(loV)}</span>
+      <span class="lab" style="left:${X(hiV)}">${kmoney(hiV)}</span>`;
+    out.innerHTML = ratio > RATIO.hi
+      ? `<p><b>At ${money(val)}, your assessment is ${(ratio * 100).toFixed(1)}% of value, above the ${(RATIO.hi * 100).toFixed(2)}% limit.</b>
+         If you prove that value, the board would set your assessment near ${money(newA)}, saving about <b>${money(save)} a year</b> at the 2026 rate.</p>`
+      : inRange ? `<p>At ${money(val)}, your assessment is ${(ratio * 100).toFixed(1)}% of value, inside the allowed range. The board would leave it as is.</p>`
+      : `<p>At ${money(val)}, your assessment is ${(ratio * 100).toFixed(1)}% of value, below the range. The board could <b>raise</b> it on appeal.</p>`;
+  };
+  input.addEventListener("input", update); update();
+}
+
+function renderPlan(sec, row) {
+  const A = row[4];
+  const fee = A < 150000 ? 5 : A < 500000 ? 25 : A < 1000000 ? 100 : 150;
+  const today = new Date();
+  const steps = [
+    ["2026-10-01", "Valuation date", "Your appeal argues what the property was worth on this day."],
+    ["2026-12-01", "Added or omitted assessment appeals due", "Only if you got an added/omitted assessment bill this year (Form AA-1)."],
+    ["2027-02-01", "2027 assessment notice; first-quarter tax due", "Check the postcard. Taxes through Q1 2027 must be paid for your appeal to be heard."],
+    ["2027-04-01", "Filing deadline", "Petition must be received by the Hudson County Board of Taxation (not postmarked). Thursday, April 1, 2027."],
+    ["2027-05-01", "Hearings (spring)", "Send comparable sales or an appraisal to the board, assessor and city clerk at least 7 days before."],
+    ["2027-07-01", "Decisions by about July 1", "The board must decide within 3 months of the deadline. You then have 45 days to appeal to the NJ Tax Court."],
+  ];
+  const tasks = [
+    ["Confirm your 2027 assessment", "It arrives on the assessment postcard; you can also look it up at taxrecords-nj.com (Hudson → Jersey City)."],
+    ["Get your property record card", "Ask the Tax Assessor (an OPRA request works). Check the facts the city has on file: size, rooms, baths, condition. Errors are the easiest fix."],
+    ["Estimate your market value on October 1, 2026", "Use the calculator above as a starting point."],
+    ["Pick 3–5 comparable sales", "Arm's-length sales of similar properties near October 1, 2026 (generally no later than December 31, 2026). Note block, lot, sale price and deed date; confirm each sale in the SR-1A records at njactb.org. Other properties' assessments don't count as evidence."],
+    ["Document condition problems", "Dated photos and repair estimates for anything that lowers value (roof, foundation, water damage)."],
+    ["Decide whether to hire an appraiser", "An appraisal is strong evidence, but the appraiser must attend the hearing and testify."],
+    ["Income property? Answer any Chapter 91 request", "If the assessor asks for income and expenses by certified mail, answer within 45 days or you can lose the appeal."],
+    ["Pay taxes through the first quarter of 2027", "Required for the board to hear your appeal."],
+    [`File the petition (Form A-1) by April 1, 2027. Fee: $${fee}`, "File online at the NJ Online Assessment Appeals site (it sends copies to the assessor and clerk), or file on paper with copies to the Jersey City Tax Assessor and City Clerk."],
+    ["Send evidence 7 days before the hearing", "Comparable sales or appraisal to the board, the assessor and the city clerk. Choose in-person, virtual, or a written-evidence-only hearing."],
+    ["After the judgment", "If you disagree, appeal to the Tax Court within 45 days. A board judgment usually holds for the next two years (Freeze Act)."],
+  ];
+  const done = store.get("jctc:plan", {});
+  sec.innerHTML = `<header><span class="eyebrow">4 · Appeal plan</span><h3>Getting ready to appeal your ${RATIO.year} assessment</h3>
+      <p class="small muted">Appeals for ${RATIO.year} go to the Hudson County Board of Taxation. If an assessment is over $1 million, the owner may file directly with the NJ Tax Court instead.</p></header>
+    <ol class="timeline">${steps.map(([iso, t, h]) => { const dt = new Date(iso + "T12:00:00"); const past = dt < today;
+      return `<li class="${past ? "past" : ""}"><span class="when">${dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+        <span><b>${esc(t)}</b>${past ? " · passed" : ""}<br><span class="small ${past ? "" : "muted"}">${esc(h)}</span></span></li>`; }).join("")}</ol>
+    <h3>Checklist</h3>
+    <p class="progress" id="prog"></p>
+    <ul class="checklist">${tasks.map(([t, h], i) => `<li class="${done[i] ? "done" : ""}"><input type="checkbox" id="task-${i}" ${done[i] ? "checked" : ""}>
+      <label for="task-${i}"><span class="t">${esc(t)}</span><br><span class="h">${esc(h)}</span></label></li>`).join("")}</ul>
+    <h3>Who to contact</h3>
+    <div class="contacts">
+      <div class="note"><b>Jersey City Tax Assessor</b><span class="sel">One Jackson Square (364 MLK Drive), 3rd floor, Jersey City, NJ 07305</span>
+        <span class="sel">201-547-5131</span><span class="sel">jccityassessor@jcnj.org</span></div>
+      <div class="note"><b>Hudson County Board of Taxation</b><span class="sel">257 Cornelison Ave, 3rd floor, Jersey City, NJ 07302</span>
+        <span class="sel">201-395-6260</span><a href="https://www.hcnj.us/finance/tax-assessments/board-of-taxation/" target="_blank" rel="noopener">Board website</a></div>
+      <div class="note"><b>File online</b><a href="https://secure.njappealonline.com/prodappeals/login.aspx" target="_blank" rel="noopener">NJ Online Assessment Appeals</a>
+        <a href="https://www.nj.gov/treasury/taxation/pdf/other_forms/lpt/petappl.pdf" target="_blank" rel="noopener">Form A-1 and instructions (PDF)</a>
+        <a href="https://www.nj.gov/treasury/taxation/pdf/lpt/chap123/2027CH123.pdf" target="_blank" rel="noopener">2027 ratios (PDF)</a></div>
+    </div>`;
+  const prog = $("#prog", sec);
+  const count = () => { const n = sec.querySelectorAll(".checklist input:checked").length; prog.textContent = `${n} of ${tasks.length} done. Your progress stays on this device.`; };
+  sec.querySelectorAll(".checklist input").forEach((c, i) => c.addEventListener("change", () => {
+    const st = store.get("jctc:plan", {}); st[i] = c.checked; store.set("jctc:plan", st);
+    c.closest("li").classList.toggle("done", c.checked); count(); }));
+  count();
+}
+
+let lastW = innerWidth, current = null;
+addEventListener("resize", () => { if (Math.abs(innerWidth - lastW) > 80 && current) { lastW = innerWidth; render($("#prop"), ...current); } });
+boot();
+})();
+</script>

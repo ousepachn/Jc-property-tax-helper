@@ -99,3 +99,13 @@ def test_lien_holder_counts():
     from analyze_delinquency import lien_holder_counts
     liens = ['[{"holder": "CITY OF JERSEY CITY"}, {"holder": "US BANK CUST FOR TOWER DB"}]', '[{"holder": ""}]', ""]
     assert lien_holder_counts(liens) == {"municipality": 1, "investor": 1, "unknown": 1}
+
+
+def test_web_builder_helpers():
+    import numpy as np
+    from build_web_data import Grid, tidy_address, unit_of
+    assert tidy_address("141 LOGAN AV") == "141 Logan Ave" and tidy_address("36 MC ADOO AVE.") == "36 McAdoo Ave"
+    assert unit_of("0906_11_2_C0602") == "C0602" and unit_of("0906_11_2") == ""
+    xs, ys = np.array([0.0, 0.3, 2.0, 0.1]), np.array([0.0, 0.0, 0.0, 0.1])
+    idx, d = Grid(xs, ys, [0, 1, 2, 3]).within(0.0, 0.0, 0.8)
+    assert list(idx) == [0, 3, 1] and d[0] == 0
