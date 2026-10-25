@@ -91,14 +91,20 @@ export async function getMeta(): Promise<Meta | null> {
   }
 }
 
-export async function mapPoints(): Promise<MapPoint[]> {
+export type BBox = [number, number, number, number]; // south, west, north, east
+
+export async function mapPoints(bbox?: BBox): Promise<MapPoint[]> {
   if (sql) {
+    const area = bbox
+      ? sql`AND lat BETWEEN ${bbox[0]} AND ${bbox[2]} AND lon BETWEEN ${bbox[1]} AND ${bbox[3]}`
+      : sql``;
     const rows = await sql<{ pin: string; lat: number; lon: number; change: number | null; appeal: Score | null }[]>`
-      SELECT pin, lat, lon, change, appeal FROM site.properties WHERE lat IS NOT NULL`;
+      SELECT pin, lat, lon, change, appeal FROM site.properties WHERE lat IS NOT NULL ${area}`;
     return rows.map((r) => [r.pin, r.lat, r.lon, r.change, r.appeal]);
   }
   const idx = await localIndex();
   return idx.rows
     .filter((r) => r[4] != null)
-    .map((r) => [String(r[0]), Number(r[4]), Number(r[5]), (r[7] as number) ?? null, (r[8] as Score) ?? null]);
+    .map((r): MapPoint => [String(r[0]), Number(r[4]), Number(r[5]), (r[7] as number) ?? null, (r[8] as Score) ?? null])
+    .filter((p) => !bbox || (p[1] >= bbox[0] && p[1] <= bbox[2] && p[2] >= bbox[1] && p[2] <= bbox[3]));
 }

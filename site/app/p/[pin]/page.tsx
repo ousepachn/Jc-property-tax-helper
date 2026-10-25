@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import MiniMap, { type Marker } from "@/components/MiniMap";
 import TaxChart from "@/components/TaxChart";
 import { getMeta, getProperty } from "@/lib/data";
 import { addressLine, kindLabel, kindPlural, money, pct, ratioPct, SCORE, shortDate, sqft } from "@/lib/format";
@@ -101,6 +102,15 @@ function Compare({ p, meta }: { p: Property; meta: Meta }) {
     );
   }
   const band = c.size_band ? Math.round(c.size_band * 100) : null;
+  const markers: Marker[] = [
+    ...(c.list ?? []).map((n) => ({ pin: n.pin, lat: n.lat, lon: n.lon, kind: "similar" as const,
+      label: `${addressLine(n.address, n.unit)} · similar, ${pct(n.change)}` })),
+    ...(p.appeal.comparable_sales ?? []).map((x) => ({ pin: x.pin, lat: x.lat, lon: x.lon, kind: "sale" as const,
+      label: `${addressLine(x.address, x.unit)} · sold ${shortDate(x.sale_date)} for ${money(x.price)}` })),
+  ].filter((m) => m.lat != null && m.lon != null);
+  if (p.lat != null && p.lon != null) {
+    markers.push({ pin: p.pin, lat: p.lat, lon: p.lon, kind: "subject", label: addressLine(p.address, p.unit) });
+  }
   return (
     <section className="card" aria-labelledby="h-compare">
       <header>
@@ -111,6 +121,7 @@ function Compare({ p, meta }: { p: Property; meta: Meta }) {
           {p.kind === "condo" ? " Other units in the same building come first." : ""}
         </p>
       </header>
+      {markers.length > 1 && <MiniMap markers={markers} />}
       <div className="tablewrap">
         <table>
           <thead><tr><th>Property</th><th className="r">Size</th><th className="r hide-sm">Built</th><th className="r hide-sm">Distance</th><th className="r">Change since {p.base_year}</th></tr></thead>

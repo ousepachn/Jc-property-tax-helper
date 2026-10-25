@@ -66,6 +66,8 @@ def test_build_with_bills_marks_renovation_and_appeals(tmp_path):
     r1 = out["0906_100_1"]
     assert r1["added_assessment_years"] == [2024] and r1["tax"]["2019"] == 10000
     assert any(n["pin"] == "0906_100_2" for n in r1["compare"]["list"])
+    assert all(n["lat"] and n["lon"] for n in r1["compare"]["list"])          # positions for the property map
+    assert all(x["pin"] and x["lat"] for x in r1["appeal"]["comparable_sales"])
     assert r1["appeals_nearby"]["won"] == 1 and r1["appeals_nearby"]["median_reduction"] == round(1000 / 12000, 4)
     assert out["0906_100_2"]["appeal_credits"] == {"2023": -1000}
     assert r1["appeal"]["score"] != "likely"                        # renovated: never "likely"

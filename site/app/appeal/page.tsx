@@ -130,7 +130,7 @@ export default function AppealGuide() {
 
 
       <section className="card" aria-labelledby="h-faq">
-        <header><span className="eyebrow">Common questions</span><h2 id="h-faq">When the tax rate is the problem</h2></header>
+        <header><span className="eyebrow">Common questions</span><h2 id="h-faq">Questions owners ask</h2></header>
         <div className="faq">
           <details open>
             <summary>My tax went up because the tax rate rose. Can I appeal the rate?</summary>
@@ -175,6 +175,52 @@ export default function AppealGuide() {
                   <a href="https://www.nj.gov/treasury/taxation/ptr/index.shtml" target="_blank" rel="noopener">Senior Freeze</a>. Senior, disabled and veteran
                   deductions are applied on the bill; ask the Tax Assessor. <a href="https://www.nj.gov/treasury/taxation/relief.shtml" target="_blank" rel="noopener">All state programs</a>.</li>
               </ul>
+            </div>
+          </details>
+          <details>
+            <summary>My assessment hasn&apos;t changed in years. Can I still appeal it?</summary>
+            <div className="prose">
+              <p>Yes, but only in the yearly filing window. Each year&apos;s assessment counts as new, even when the number is the same,
+                so it never gets locked in. You appeal the <b>coming</b> year&apos;s assessment after the notice arrives (by February 1)
+                and before <b>April 1</b> (or 45 days after the notices are mailed, if that is later). After the deadline, that
+                year can&apos;t be appealed; the next chance is the following year.</p>
+              <p><b>Example:</b> a home has been assessed at $600,000 since 2024. In October 2026 it is too late to appeal 2026 (the
+                deadline was April 1, 2026). The owner can appeal the 2027 assessment by April 1, 2027, arguing what the home was
+                worth on October 1, 2026.</p>
+              <ul>
+                <li><b>After a successful appeal</b>, the board&apos;s judgment usually freezes the assessment for the next two years
+                  (the Freeze Act): the assessor can&apos;t raise it unless you add improvements or the city revalues everything. You can
+                  still appeal during those years, and the freeze ends after the second.</li>
+                <li><b>Added or omitted assessment bills</b> (see the next question) have their own deadline: December 1 of the year
+                  you are billed.</li>
+                <li><b>A factual mistake</b> on your property record, like the wrong floor area or room count, can be raised with the
+                  Tax Assessor at any time.</li>
+              </ul>
+            </div>
+          </details>
+          <details>
+            <summary>I renovated. When will my taxes change, and will I get a back bill?</summary>
+            <div className="prose">
+              <p>Once the work is finished, the assessor adds its value with an <b>added assessment</b>, billed for the whole months
+                after completion. When the bill comes depends on when the work finished:</p>
+              <ul>
+                <li><b>Finished January 1 to September 30:</b> billed in the fall of the same year, for the rest of that year.</li>
+                <li><b>Finished October 1 to December 31:</b> billed in the fall of the <b>following</b> year, for the rest of the
+                  completion year plus the whole following year (that year&apos;s assessment was set on October 1, before the work was done).</li>
+                <li>From then on, the work is part of your regular assessment.</li>
+                <li>If the assessor misses it, an <b>omitted added assessment</b> can be billed later, but only one year back.</li>
+              </ul>
+              <p><b>Example:</b> work finished in November 2025, and the assessor adds $50,000 of assessed value (an illustration;
+                the real amount depends on the work).</p>
+              <div className="split">
+                <div><span>December 2025 (1 month): $50,000 × 2.335% ÷ 12</span><span className="num">$97</span></div>
+                <div><span>All of 2026: $50,000 × 2.657%</span><span className="num">$1,329</span></div>
+                <div className="tot"><span>Added assessment bill, fall 2026</span><span className="num">$1,426</span></div>
+                <div><span>2027 onward: in the regular assessment, at the year&apos;s rate</span><span className="num">about $1,329 a year</span></div>
+              </div>
+              <p>If that bill isn&apos;t sent until fall 2027, it can cover only 2026; the December 2025 month can no longer be billed.
+                Seeing nothing during the year after the work is normal. Set the money aside, appeal the added assessment by December 1
+                if it looks too high, or ask the Tax Assessor whether one is pending.</p>
             </div>
           </details>
           <details>

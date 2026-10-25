@@ -92,6 +92,11 @@ footer .wrap { display: grid; gap: 6px; }
 .mapctl { position: absolute; right: 12px; top: 12px; display: grid; gap: 6px; }
 .mapctl button { width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 18px; cursor: pointer; }
 .maptip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 13px; padding: 6px 8px; border-radius: 6px; transform: translate(-50%, calc(-100% - 10px)); white-space: nowrap; }
+.minimap { position: relative; height: 320px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: var(--bg); }
+.minimap canvas { width: 100%; height: 100%; display: block; cursor: pointer; }
+.legend i.dot { width: 10px; height: 10px; border-radius: 50%; }
+.legend i.sq { width: 10px; height: 10px; border-radius: 2px; }
+@media (max-width: 600px) { .minimap { height: 260px; } }
 .mapstatus { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
 
 /* chart */

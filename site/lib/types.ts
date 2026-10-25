@@ -9,10 +9,15 @@ export interface Neighbor {
   sq_ft: number | null;
   year_built: number | null;
   miles: number;
+  lat: number;
+  lon: number;
   change: number | null;
 }
 
 export interface Sale {
+  pin: string;
+  lat: number;
+  lon: number;
   address: string;
   unit: string | null;
   sq_ft: number;
