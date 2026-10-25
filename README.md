@@ -41,7 +41,7 @@ python -m pytest tests
 | Union City (0910) | Edmunds WIPP (GWT-RPC) | `pipeline/portals/wipp.py` |
 
 ```
-P="python pipeline/extract_bills.py"            # SQLite store: data/portal/bills.sqlite
+P="python pipeline/extract_bills.py"            # store: $DATABASE_URL (Supabase) if set, else data/portal/bills.sqlite
 $P index  --town union-city                     # 1. list every account (resumable)
 $P fetch  --town union-city                     # 2. fetch bills for pending accounts (resumable)
 $P status                                       # progress per town
@@ -55,7 +55,8 @@ python pipeline/validate_portal.py              # compare against the MOD-IV 202
   Only `property_tax` should be used for "what did this property pay".
 - Owner names and mailing addresses are stored only with `--include-owners` (on `index`/`fetch`), and
   never for accounts the portal flags under Daniel's Law (N.J.S.A. 47:1B). `--keep-raw` also stores
-  each portal response zlib-compressed in `raw_responses` (print one with `raw --pin <pin>`), which
+  each portal response zlib-compressed (in `raw_responses` locally, in the private Supabase Storage
+  bucket `portal-raw` on Postgres; print one with `raw --pin <pin>`), which
   keeps payment history and full ledger history that the normalized `bills` table drops.
   `export --redact-owners` leaves the owner columns out.
 - **Delinquency.** Each fetch also records, per account: `past_due_amount`, `past_due_bills`,
@@ -87,26 +88,19 @@ python pipeline/validate_portal.py              # compare against the MOD-IV 202
 
 `.github/workflows/extract-bills.yml` runs every 6 hours (and on demand from the Actions tab →
 *Extract tax bills* → *Run workflow*). Two jobs run in parallel, one per portal host:
-`hls` (Jersey City) and `wipp` (Union City, then Hoboken).
+`hls` (Jersey City) and `wipp` (Union City, then Hoboken). Setup: [docs/hosting.md](docs/hosting.md).
 
-- Each job restores its SQLite state from the Actions cache, crawls for up to `max_minutes`
-  (default 320), then saves the state back to the cache, so the full first pass (~1 day for
-  Jersey City) completes over several runs.
+- **Data lives in Supabase, not on GitHub.** Each job reads and writes the hosted Postgres database
+  (`DATABASE_URL` secret, schema `portal`) directly; raw portal responses go to a private Supabase
+  Storage bucket. No Actions cache, release or artifact holds crawl data, so the repository can be public.
+- Each job crawls for up to `max_minutes` (default 320) and continues where the last run stopped,
+  so the full first pass (~1 day for Jersey City) completes over several runs.
 - After the first pass, accounts are re-fetched once they are more than 80 days old
   (`REFRESH_DAYS`), which picks up each new quarterly bill; delinquent accounts are re-checked
   weekly (`RECHECK_DELINQUENT_DAYS`). Bills before tax year 2019 are not kept.
-- Every run uploads an `export-hls` / `export-wipp` artifact (accounts.csv, annual.csv, bills.csv.gz),
-  kept for 1 day to stay within private-repo artifact storage; the latest run always has one,
-  and writes per-town progress to the run summary.
-- The state is kept in two places: the Actions cache (fast, but GitHub evicts it after 7 days
-  unused) and the **`portal-data` release** (`hls.sqlite.gz`, `wipp.sqlite.gz`, `export-*.tar.gz`),
-  replaced after every run and never expiring. If the cache is gone, the next run restores from the
-  release. Download the latest database or CSVs any time from the repo's Releases page.
-  The release backup only runs while the repository is private.
-- **Owner data requires a private repository.** Each job checks the repo's visibility first. If it is
-  private (and `include_owners` is on, the default), it runs with `--include-owners --keep-raw`;
-  accounts fetched earlier without owners are backfilled. If the repo is public it collects no owner
-  fields, exports with `--redact-owners`, and puts a warning in the run summary.
+- Owner fields and raw responses are collected (`--include-owners --keep-raw`) unless turned off for
+  a run; they are stored only in the database and bucket. Logs and the run summary show counts and
+  parcel ids only, since a public repository's logs are public.
 
 ## Owner-facing web page (`web/`)
 
