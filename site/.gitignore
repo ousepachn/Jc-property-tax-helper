@@ -1,0 +1,7 @@
+node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+# local development data from pipeline/build_site.py --json-out (public fields, but large and regenerated)
+/data
+.env*.local

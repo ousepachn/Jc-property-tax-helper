@@ -8,6 +8,7 @@ public, and public repositories get unlimited free GitHub Actions minutes.
 | Code, tests, workflow definitions | GitHub (public) | Anyone |
 | Run logs and run summaries | GitHub (public) | Anyone. They hold counts and parcel ids only. |
 | Accounts, bills, assessments, delinquency, owner names | Supabase Postgres, schema `portal` | You (database owner) |
+| County tax board records: floor area, sales with SR-1A codes, assessments by year (`parcels`, `parcel_assessments`); owner names and mailing addresses by year (`parcel_owners`) | Supabase Postgres, schema `portal` | You (database owner) |
 | Raw portal responses (full ledger, payments, liens, servicer) | Supabase Storage, private bucket `portal-raw` | You |
 | Connection string and secret key | GitHub Actions secrets, your password manager | You |
 
@@ -74,7 +75,47 @@ public with it.
 6. Actions → *Extract tax bills* → **Run workflow** once to check it. The run summary should show
    per-town counts.
 
+## 5. Publish the website (Vercel)
+
+The site (`site/`, Next.js) reads one table of public per-property summaries, `site.properties`, which
+the *Build site data* workflow rebuilds daily. It connects as a read-only database user that can see
+only the `site` schema, never `portal`.
+
+1. **Build the data once.** Actions → *Build site data* → Run workflow (or locally:
+   `python pipeline/fetch_njogis_parcels.py --county HUDSON --out data/raw/njogis` then
+   `python pipeline/build_site.py --parcels data/raw/njogis/parcels_hudson.csv`). This creates the `site` schema.
+2. **Create the read-only user.** In Supabase → SQL Editor, with a new strong password:
+
+   ```sql
+   create role site_reader login password 'CHOOSE-A-STRONG-PASSWORD';
+   grant usage on schema site to site_reader;
+   grant select on all tables in schema site to site_reader;
+   alter default privileges in schema site grant select on tables to site_reader;
+   ```
+
+   It has no access to `portal` (owners, bills, liens). Check with `select has_schema_privilege('site_reader', 'portal', 'usage');`, which should be `false`.
+3. **Create the Vercel project.** vercel.com → Add New → Project → import this repository →
+   **Root Directory: `site`** (framework: Next.js, detected).
+4. **Add one environment variable** (Settings → Environment Variables), `SITE_DATABASE_URL`:
+
+   ```
+   postgresql://site_reader.vcdgjfleuxjiemrpfrae:<password>@aws-0-us-east-1.pooler.supabase.com:6543/postgres
+   ```
+
+   Note the user name `site_reader.<project ref>` and port **6543** (the transaction pooler suits
+   Vercel's short-lived functions; the site only reads). Set the function region to Washington, D.C.
+   (`iad1`), next to the database.
+5. Deploy. The map loads every parcel once and is cached for a day; property pages refresh hourly.
+
+Local development without the database: `python pipeline/build_site.py --parcels ... --db <sqlite or
+$DATABASE_URL> --json-out site/data`, then `cd site && npm install && npm run dev`.
+
 ## Day to day
+
+- *Build site data* runs daily and rebuilds the website's per-property summaries.
+- *County tax records* runs on the 3rd of each month (and on demand) and reloads the county tax
+  board's records for Jersey City, Hoboken and Union City: two requests per town. To load them
+  yourself: `python pipeline/fetch_county_records.py --town jersey-city` (uses `$DATABASE_URL`).
 
 - The crawl runs every 6 hours. GitHub turns off scheduled workflows in a public repository after 60
   days without commits; re-enable it from the Actions tab if that happens.

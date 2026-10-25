@@ -1,0 +1,37 @@
+name: Build site data
+
+# Daily: rebuild the public site's per-property summaries (schema `site` in the hosted database)
+# from the crawl, the county records and the state parcel map. The website (Vercel) reads them
+# with a read-only role and picks up changes within an hour; no redeploy needed.
+on:
+  schedule:
+    - cron: "41 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.repository_owner == 'ousepachn'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Check configuration
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::The DATABASE_URL secret is not set. See docs/hosting.md."
+            exit 1
+          fi
+      - name: Download parcel map positions (public, about 3 minutes)
+        run: python pipeline/fetch_njogis_parcels.py --county HUDSON --out data/raw/njogis | tail -1
+      - name: Build site data
+        run: python pipeline/build_site.py --parcels data/raw/njogis/parcels_hudson.csv | tee -a "$GITHUB_STEP_SUMMARY"
