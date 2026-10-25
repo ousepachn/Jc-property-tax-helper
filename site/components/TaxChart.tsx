@@ -9,21 +9,23 @@ interface Props {
 
 const W = 480, H = 220, L = 56, R = 22, T = 14, B = 30;
 
-function niceMax(v: number) {
-  const p = Math.pow(10, Math.floor(Math.log10(v)));
-  for (const m of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * p >= v) return m * p;
-  return v;
+// round tick step (1, 2, 2.5 or 5 x 10^n) giving about 4 intervals up to the data maximum
+function niceStep(v: number) {
+  const raw = v / 4, p = Math.pow(10, Math.floor(Math.log10(raw)));
+  for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= raw) return m * p;
+  return raw;
 }
 
 export default function TaxChart({ years, yours, theirs, flags }: Props) {
   const vals = [...yours, ...theirs].filter((v): v is number => v != null);
   if (!vals.length) return null;
-  const max = niceMax(Math.max(...vals) * 1.05);
+  const top = Math.max(...vals) * 1.05, step = niceStep(top), max = Math.ceil(top / step) * step;
   const x = (i: number) => L + (years.length === 1 ? (W - L - R) / 2 : (i * (W - L - R)) / (years.length - 1));
   const y = (v: number) => T + (H - T - B) * (1 - v / max);
   const line = (s: (number | null)[]) =>
     s.map((v, i) => (v == null ? null : `${x(i)},${y(v)}`)).filter(Boolean).join(" ");
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * max);
+  const ticks: number[] = [];
+  for (let t = 0; t <= max + 1e-6; t += step) ticks.push(t);
   const k = (v: number) =>
     v >= 1000 ? `$${(v / 1000).toLocaleString("en-US", { maximumFractionDigits: v % 1000 ? 1 : 0 })}k` : `$${Math.round(v)}`;
   return (
