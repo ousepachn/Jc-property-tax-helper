@@ -102,6 +102,14 @@ python pipeline/validate_portal.py              # compare against the MOD-IV 202
   a run; they are stored only in the database and bucket. Logs and the run summary show counts and
   parcel ids only, since a public repository's logs are public.
 
+### County tax board records
+
+`pipeline/fetch_county_records.py` loads each town's records from the county tax boards' public search
+(taxrecords-nj.com, which can export a whole municipality as one CSV): building floor area, year built,
+the last sale with its SR-1A nonusable code, and four years of assessments, which the state MOD-IV file
+lacks. Owner names and mailing addresses go to the private `parcel_owners` table only. Runs monthly via
+`.github/workflows/county-records.yml`.
+
 ## Owner-facing web page (`web/`)
 
 `web/index.html` is a single static page for Jersey City owners: search by address, tax history 2019–2026

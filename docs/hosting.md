@@ -8,6 +8,7 @@ public, and public repositories get unlimited free GitHub Actions minutes.
 | Code, tests, workflow definitions | GitHub (public) | Anyone |
 | Run logs and run summaries | GitHub (public) | Anyone. They hold counts and parcel ids only. |
 | Accounts, bills, assessments, delinquency, owner names | Supabase Postgres, schema `portal` | You (database owner) |
+| County tax board records: floor area, sales with SR-1A codes, assessments by year (`parcels`, `parcel_assessments`); owner names and mailing addresses by year (`parcel_owners`) | Supabase Postgres, schema `portal` | You (database owner) |
 | Raw portal responses (full ledger, payments, liens, servicer) | Supabase Storage, private bucket `portal-raw` | You |
 | Connection string and secret key | GitHub Actions secrets, your password manager | You |
 
@@ -75,6 +76,10 @@ public with it.
    per-town counts.
 
 ## Day to day
+
+- *County tax records* runs on the 3rd of each month (and on demand) and reloads the county tax
+  board's records for Jersey City, Hoboken and Union City: two requests per town. To load them
+  yourself: `python pipeline/fetch_county_records.py --town jersey-city` (uses `$DATABASE_URL`).
 
 - The crawl runs every 6 hours. GitHub turns off scheduled workflows in a public repository after 60
   days without commits; re-enable it from the Actions tab if that happens.

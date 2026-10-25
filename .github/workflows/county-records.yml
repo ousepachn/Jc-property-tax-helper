@@ -1,0 +1,40 @@
+name: County tax records
+
+# Monthly: load the county tax board's assessment records (floor area, last sale with its SR-1A
+# nonusable code, four years of assessments) for each town into the hosted database. Two requests
+# per town to taxrecords-nj.com (search, then the export it links to).
+#
+# Owner names and mailing addresses go only to the private parcel_owners table. The log shows
+# counts only; nothing is cached, released or uploaded as an artifact.
+on:
+  schedule:
+    - cron: "23 7 3 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  load:
+    if: github.repository_owner == 'ousepachn'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Check configuration
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::The DATABASE_URL secret is not set. See docs/hosting.md."
+            exit 1
+          fi
+      - name: Load county records
+        run: |
+          python pipeline/fetch_county_records.py --town jersey-city --town hoboken --town union-city \
+            | tee -a "$GITHUB_STEP_SUMMARY"
