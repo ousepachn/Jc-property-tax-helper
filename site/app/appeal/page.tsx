@@ -145,18 +145,18 @@ export default function AppealGuide() {
           <details open>
             <summary>How much of my increase came from the rate, and how much from my assessment?</summary>
             <div className="prose">
-              <p>Split the change in two. Example: <Link href="/p/0906_5803_38">38 Jefferson Ave</Link>, a 3-family home, using its actual bills.</p>
+              <p>Split the change in two. Example: a home assessed at $500,000 in 2021 and $600,000 in 2026 (an illustration,
+                using Jersey City&apos;s actual tax rates).</p>
               <div className="split">
-                <div><span>2021 tax: $651,800 assessment × 1.604%</span><span className="num">$10,455</span></div>
-                <div><span>2026 tax: $950,000 assessment × 2.657%</span><span className="num">$25,242</span></div>
-                <div className="tot"><span>Increase</span><span className="num">$14,787</span></div>
-                <div><span><b>From the rate:</b> the 2021 assessment at the 2026 rate, $651,800 × (2.657% − 1.604%)</span><span className="num">$6,863</span></div>
-                <div><span><b>From the assessment:</b> $298,200 higher, × the 2026 rate of 2.657%</span><span className="num">$7,923</span></div>
+                <div><span>2021 tax: $500,000 assessment × 1.604%</span><span className="num">$8,020</span></div>
+                <div><span>2026 tax: $600,000 assessment × 2.657%</span><span className="num">$15,942</span></div>
+                <div className="tot"><span>Increase</span><span className="num">$7,922</span></div>
+                <div><span><b>From the rate:</b> the 2021 assessment at the 2026 rate, $500,000 × (2.657% − 1.604%)</span><span className="num">$5,265</span></div>
+                <div><span><b>From the assessment:</b> $100,000 higher, × the 2026 rate of 2.657%</span><span className="num">$2,657</span></div>
               </div>
-              <p>The <b>$6,863 from the rate can&apos;t be appealed.</b> The <b>$7,923 from the assessment can</b>, if the assessment is
-                above the allowed range for what the home was worth. Here the assessment rose after a 2022 renovation, and the owner
-                already won a county board reduction (from $992,600 to $950,000). Its appeal check says &quot;possible&quot;: the estimate puts the
-                assessment above the limit, but the nearby sales vary widely and don&apos;t reflect the renovation.</p>
+              <p>The <b>$5,265 from the rate can&apos;t be appealed.</b> The <b>$2,657 from the assessment can</b>, if the assessment is
+                above the allowed range for what the home was worth. An assessment usually rises after a renovation (an added
+                assessment) or a citywide revaluation. The appeal check on each property page tells you whether it looks too high.</p>
               <p className="small muted">To do this for your home, take your assessment and tax for two years from your bills or the
                 county records search. The tax rate is your tax divided by your assessment.</p>
             </div>

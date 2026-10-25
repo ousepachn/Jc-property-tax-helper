@@ -41,7 +41,7 @@ export default function Search({ autoFocus = false }: { autoFocus?: boolean }) {
         id="address"
         autoFocus={autoFocus}
         autoComplete="off"
-        placeholder="Street address, e.g. 38 Jefferson Ave"
+        placeholder="Street address, e.g. 280 Grove St"
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onKeyDown={(e) => {
