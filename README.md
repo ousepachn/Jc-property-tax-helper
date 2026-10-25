@@ -110,7 +110,16 @@ the last sale with its SR-1A nonusable code, and four years of assessments, whic
 lacks. Owner names and mailing addresses go to the private `parcel_owners` table only. Runs monthly via
 `.github/workflows/county-records.yml`.
 
-## Owner-facing web page (`web/`)
+## Public website (`site/`)
+
+Next.js app for Vercel: map of every Jersey City parcel colored by tax change, address search, a page
+per property (tax over time vs similar nearby properties and the city, the appeal check with the
+comparable sales it used, appeals won nearby) and a plain-language appeal guide. It reads the
+public-fields-only `site` schema, rebuilt daily by `pipeline/build_site.py`
+(`.github/workflows/build-site.yml`). Similar properties: same type, floor area within ±10% (at most
+±15%), same era, nearby; see `pipeline/comparables.py`. Setup: [docs/hosting.md](docs/hosting.md#5-publish-the-website-vercel).
+
+## Earlier owner-facing web page (`web/`)
 
 `web/index.html` is a single static page for Jersey City owners: search by address, tax history 2019–2026
 (with what drove each year's change: the city rate vs. the property's own assessment), the 2026 first-half vs

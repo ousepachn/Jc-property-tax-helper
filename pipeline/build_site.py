@@ -259,6 +259,10 @@ def write_postgres(db, out, meta):
         pin TEXT PRIMARY KEY, town TEXT, address TEXT, unit TEXT, kind TEXT, lat DOUBLE PRECISION,
         lon DOUBLE PRECISION, tax DOUBLE PRECISION, change DOUBLE PRECISION, appeal TEXT, data JSONB)""")
     db.execute(f"CREATE TABLE IF NOT EXISTS {SITE_SCHEMA}.meta (key TEXT PRIMARY KEY, value JSONB)")
+    for role in ("anon", "authenticated"):
+        if db.execute("SELECT 1 FROM pg_roles WHERE rolname = ?", (role,)).fetchone():
+            db.execute(f"REVOKE ALL ON SCHEMA {SITE_SCHEMA} FROM {role}")
+            db.execute(f"REVOKE ALL ON ALL TABLES IN SCHEMA {SITE_SCHEMA} FROM {role}")
     db.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
     db.execute(f"CREATE INDEX IF NOT EXISTS properties_address_trgm ON {SITE_SCHEMA}.properties "
                "USING gin (address gin_trgm_ops)")
