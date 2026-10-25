@@ -1,24 +1,32 @@
 """Check extracted portal data against the state MOD-IV 2026 tax list.
 
-  python pipeline/validate_portal.py [--db data/portal/bills.sqlite] [--modiv data/interim/modiv_hudson_2026.csv]
+  python pipeline/validate_portal.py [--db data/portal/bills.sqlite | --db "$DATABASE_URL"] [--modiv data/interim/modiv_hudson_2026.csv]
 
 For each town: how many portal accounts join to a MOD-IV parcel, whether assessments agree,
 whether 2025 billed totals equal MOD-IV's last_year_tax (2025), and what 2026 looks like
 (implied rate, change vs 2025, second-half vs first-half bills).
 """
 import argparse
-import sqlite3
+import os
+import sys
+import warnings
 from pathlib import Path
 
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from extract_bills import BILL_EXPORT_SQL, connect  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 def load(db_path, modiv_path):
-    db = sqlite3.connect(db_path)
-    accts = pd.read_sql("SELECT * FROM accounts WHERE status IN ('done','no_bills')", db)
-    bills = pd.read_sql("SELECT * FROM bills", db)
+    db = connect(db_path)
+    with warnings.catch_warnings():   # pandas prefers SQLAlchemy for Postgres; a DB-API connection works
+        warnings.simplefilter("ignore", UserWarning)
+        accts = pd.read_sql("SELECT * FROM accounts WHERE status IN ('done','no_bills')", db.conn)
+        bills = pd.read_sql(BILL_EXPORT_SQL, db.conn)
+    db.close()
     modiv = pd.read_csv(modiv_path, dtype=str, low_memory=False,
                         usecols=["pin", "county_district", "property_class", "net_value", "last_year_tax", "exempt_statute"])
     modiv = modiv[modiv.county_district.isin(accts.county_district.unique())].drop_duplicates("pin")
@@ -44,7 +52,7 @@ def annual(bills):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--db", default=ROOT / "data" / "portal" / "bills.sqlite")
+    ap.add_argument("--db", default=os.environ.get("DATABASE_URL") or str(ROOT / "data" / "portal" / "bills.sqlite"))
     ap.add_argument("--modiv", default=ROOT / "data" / "interim" / "modiv_hudson_2026.csv")
     ap.add_argument("--out", default=None, help="optional CSV of per-parcel comparisons")
     args = ap.parse_args()

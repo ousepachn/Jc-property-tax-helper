@@ -1,38 +1,43 @@
 name: Extract tax bills
 
-# Crawls the city billing portals a few hours at a time. Each run restores the crawler's
-# SQLite state from the Actions cache, continues where the previous run stopped, saves the
-# state again and uploads a CSV export. Once everything is fetched, runs finish in a minute
-# until accounts are older than REFRESH_DAYS, then they are fetched again (new quarterly bills).
+# Crawls the city billing portals a few hours at a time into the hosted database (Supabase).
+# Each run continues where the previous one stopped; once everything is fetched, runs finish in
+# a minute or two until accounts are older than REFRESH_DAYS (new quarterly bills).
 #
-# Durable copy: after every run the database and CSV export are also uploaded to the GitHub
-# Release "portal-data" (replacing the previous files). Release files never expire, so if the
-# cache is evicted (7 days unused) the next run restores from the release instead of starting over.
+# Nothing the crawl collects is written to GitHub: no Actions cache, no release, no artifact.
+# Owner names, mailing addresses and raw portal responses go only to the database and its
+# private storage bucket. Run logs and the run summary show counts and parcel ids (public
+# tax-roll data), never owner data; keep it that way, since the logs of a public repo are public.
+#
+# Secrets (Settings -> Secrets and variables -> Actions), see docs/hosting.md:
+#   DATABASE_URL         Supabase Session pooler connection string (port 5432)
+#   SUPABASE_URL         https://<project>.supabase.co          (for raw responses)
+#   SUPABASE_SECRET_KEY  a secret API key (sb_secret_...)      (for raw responses)
 on:
   schedule:
     - cron: "17 */6 * * *"
   workflow_dispatch:
     inputs:
       max_minutes:
-        description: "Minutes of crawling per job before saving and stopping"
+        description: "Minutes of crawling per job before stopping"
         default: "320"
       include_owners:
-        description: "Store owner names, mailing addresses and raw responses (private repo only)"
+        description: "Store owner names, mailing addresses and raw responses (database only)"
         type: boolean
         default: true
 
 permissions:
-  contents: write   # create/update the portal-data release
-  actions: read
+  contents: read
 
 env:
   REFRESH_DAYS: "80"
   RECHECK_DELINQUENT_DAYS: "7"   # delinquent accounts are re-fetched weekly
   MIN_YEAR: "2019"
-  RELEASE_TAG: portal-data
 
 jobs:
   extract:
+    # forks have no secrets and must not crawl
+    if: github.repository_owner == 'ousepachn'
     strategy:
       fail-fast: false
       matrix:
@@ -47,9 +52,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     env:
-      DB: data/portal/${{ matrix.portal }}.sqlite
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       MAX_MINUTES: ${{ inputs.max_minutes || '320' }}
-      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -58,45 +64,23 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
 
-      # Owner data is collected only while the repository is private. If it is public, the run
-      # continues without owner fields and raw responses, and says so in the summary.
-      - name: Check repository visibility
+      - name: Check configuration
         env:
-          GH_TOKEN: ${{ github.token }}
           WANT_OWNERS: ${{ github.event_name == 'schedule' || inputs.include_owners }}
         run: |
-          private=$(gh api "repos/${{ github.repository }}" --jq .private)
-          echo "REPO_PRIVATE=$private" >> "$GITHUB_ENV"
-          if [ "$WANT_OWNERS" = "true" ] && [ "$private" = "true" ]; then
-            echo "OWNER_FLAGS=--include-owners" >> "$GITHUB_ENV"
-            echo "RAW_FLAGS=--keep-raw" >> "$GITHUB_ENV"
-            echo "Repository is private: collecting owner fields and raw responses."
-          else
-            echo "OWNER_FLAGS=" >> "$GITHUB_ENV"
-            echo "RAW_FLAGS=" >> "$GITHUB_ENV"
-            msg="Owner fields NOT collected (repository private=$private, requested=$WANT_OWNERS)."
-            echo "::warning::$msg"
-            echo "> $msg" >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::The DATABASE_URL secret is not set. See docs/hosting.md."
+            exit 1
           fi
-
-      - name: Restore crawler state
-        uses: actions/cache/restore@v4
-        with:
-          path: data/portal/${{ matrix.portal }}.sqlite.gz
-          key: portal-${{ matrix.portal }}-${{ github.run_id }}
-          restore-keys: portal-${{ matrix.portal }}-
-
-      - name: Unpack state (cache, else release backup)
-        run: |
-          mkdir -p data/portal
-          if [ -f "$DB.gz" ]; then
-            echo "Restored state from the Actions cache"
-          elif gh release download "$RELEASE_TAG" --pattern "${{ matrix.portal }}.sqlite.gz" --dir data/portal 2>/dev/null; then
-            echo "Cache empty; restored state from release $RELEASE_TAG"
+          if [ "$WANT_OWNERS" != "true" ]; then
+            echo "OWNER_FLAGS=" >> "$GITHUB_ENV"; echo "RAW_FLAGS=" >> "$GITHUB_ENV"
+            echo "> Owner fields not collected (turned off for this run)." >> "$GITHUB_STEP_SUMMARY"
+          elif [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_SECRET_KEY" ]; then
+            echo "OWNER_FLAGS=--include-owners" >> "$GITHUB_ENV"; echo "RAW_FLAGS=--keep-raw" >> "$GITHUB_ENV"
           else
-            echo "No previous state, starting fresh"
+            echo "OWNER_FLAGS=--include-owners" >> "$GITHUB_ENV"; echo "RAW_FLAGS=" >> "$GITHUB_ENV"
+            echo "::warning::SUPABASE_URL / SUPABASE_SECRET_KEY not set: raw portal responses are not kept."
           fi
-          if [ -f "$DB.gz" ]; then gunzip -f "$DB.gz"; fi
 
       - name: Crawl
         run: |
@@ -104,62 +88,17 @@ jobs:
           left() { echo $(( MAX_MINUTES - ($(date +%s) - start) / 60 )); }
           for town in ${{ matrix.towns }}; do
             [ "$(left)" -le 5 ] && break
-            # re-parse stored responses when the parsers changed (no network; only outdated rows)
-            python pipeline/extract_bills.py --db "$DB" rederive --town "$town" --min-year "$MIN_YEAR" --max-minutes "$(left)"
+            # re-parse stored responses when the parsers changed (no portal requests; only outdated rows)
+            python pipeline/extract_bills.py rederive --town "$town" --min-year "$MIN_YEAR" --max-minutes "$(left)"
             [ "$(left)" -le 5 ] && break
-            python pipeline/extract_bills.py --db "$DB" index --town "$town" --max-minutes "$(left)" $OWNER_FLAGS
+            python pipeline/extract_bills.py index --town "$town" --max-minutes "$(left)" $OWNER_FLAGS
             [ "$(left)" -le 5 ] && break
-            python pipeline/extract_bills.py --db "$DB" fetch --town "$town" --retry-errors \
+            python pipeline/extract_bills.py fetch --town "$town" --retry-errors \
               --refresh-days "$REFRESH_DAYS" --recheck-delinquent-days "$RECHECK_DELINQUENT_DAYS" \
               --min-year "$MIN_YEAR" --max-minutes "$(left)" $OWNER_FLAGS $RAW_FLAGS
           done
 
-      - name: Pack state
+      - name: Summary
         if: always()
         run: |
-          [ -f "$DB" ] || exit 0
-          python -c "import sqlite3, sys; db = sqlite3.connect(sys.argv[1]); db.execute('VACUUM'); db.close()" "$DB"
-          gzip -kf "$DB"
-
-      - name: Save crawler state
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: data/portal/${{ matrix.portal }}.sqlite.gz
-          key: portal-${{ matrix.portal }}-${{ github.run_id }}-${{ github.run_attempt }}
-
-      - name: Summary and export
-        if: always()
-        run: |
-          [ -f "$DB" ] || exit 0
-          { echo "### ${{ matrix.portal }}"; echo '```'; python pipeline/extract_bills.py --db "$DB" status; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-          redact=$([ -z "$OWNER_FLAGS" ] && echo --redact-owners || true)
-          python pipeline/extract_bills.py --db "$DB" export --out "export/${{ matrix.portal }}" $redact
-          gzip -f export/${{ matrix.portal }}/bills.csv
-
-      - name: Back up to release
-        if: always()
-        run: |
-          [ -f "$DB.gz" ] || exit 0
-          if [ "$REPO_PRIVATE" != "true" ]; then
-            echo "::warning::Repository is not private; skipping release backup (releases would be public)."
-            exit 0
-          fi
-          tar -czf "export-${{ matrix.portal }}.tar.gz" -C export "${{ matrix.portal }}"
-          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            # both jobs may try at once; whichever loses just uploads to the one that exists
-            gh release create "$RELEASE_TAG" --prerelease --title "Portal data (latest crawl state)" \
-              --notes "Updated by the Extract tax bills workflow after every run. *.sqlite.gz = full crawler database (owner fields and raw responses when collected); export-*.tar.gz = CSV export. Private: do not make public." \
-              || sleep 10
-          fi
-          gh release upload "$RELEASE_TAG" "$DB.gz" "export-${{ matrix.portal }}.tar.gz" --clobber
-          echo "Backed up to release $RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload export
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: export-${{ matrix.portal }}
-          path: export/${{ matrix.portal }}
-          retention-days: 1
-          if-no-files-found: ignore
+          { echo "### ${{ matrix.portal }}"; echo '```'; python pipeline/extract_bills.py status; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
