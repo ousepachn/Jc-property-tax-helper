@@ -128,6 +128,65 @@ export default function AppealGuide() {
         </section>
       </div>
 
+
+      <section className="card" aria-labelledby="h-faq">
+        <header><span className="eyebrow">Common questions</span><h2 id="h-faq">When the tax rate is the problem</h2></header>
+        <div className="faq">
+          <details open>
+            <summary>My tax went up because the tax rate rose. Can I appeal the rate?</summary>
+            <div className="prose">
+              <p>No. An appeal can only change your <b>assessment</b>, which sets your share of the total. The rate is set each
+                year by dividing what the city, the schools and the county need to raise by the total assessed value of all
+                property in Jersey City. It is the same for every property, so there is nothing about your home to appeal.</p>
+              <p>Jersey City&apos;s rate went from <b>$1.604 per $100</b> of assessed value in 2021 to <b>$2.657</b> in 2026, a 66% rise
+                that every property paid.</p>
+            </div>
+          </details>
+          <details open>
+            <summary>How much of my increase came from the rate, and how much from my assessment?</summary>
+            <div className="prose">
+              <p>Split the change in two. Example: <Link href="/p/0906_5803_38">38 Jefferson Ave</Link>, a 3-family home, using its actual bills.</p>
+              <div className="split">
+                <div><span>2021 tax: $651,800 assessment × 1.604%</span><span className="num">$10,455</span></div>
+                <div><span>2026 tax: $950,000 assessment × 2.657%</span><span className="num">$25,242</span></div>
+                <div className="tot"><span>Increase</span><span className="num">$14,787</span></div>
+                <div><span><b>From the rate:</b> the 2021 assessment at the 2026 rate, $651,800 × (2.657% − 1.604%)</span><span className="num">$6,863</span></div>
+                <div><span><b>From the assessment:</b> $298,200 higher, × the 2026 rate of 2.657%</span><span className="num">$7,923</span></div>
+              </div>
+              <p>The <b>$6,863 from the rate can&apos;t be appealed.</b> The <b>$7,923 from the assessment can</b>, if the assessment is
+                above the allowed range for what the home was worth. Here the assessment rose after a 2022 renovation, and the owner
+                already won a county board reduction (from $992,600 to $950,000). Its appeal check says &quot;possible&quot;: the estimate puts the
+                assessment above the limit, but the nearby sales vary widely and don&apos;t reflect the renovation.</p>
+              <p className="small muted">To do this for your home, take your assessment and tax for two years from your bills or the
+                county records search. The tax rate is your tax divided by your assessment.</p>
+            </div>
+          </details>
+          <details>
+            <summary>If I can&apos;t appeal the rate, what can I do about it?</summary>
+            <div className="prose">
+              <ul>
+                <li><b>Speak at budget hearings.</b> The rate follows the budgets. The City Council adopts the municipal budget, the
+                  Board of Education the school budget, and the Hudson County Board of Commissioners the county budget, each at public
+                  meetings where residents can comment.</li>
+                <li><b>Read your bill.</b> It shows how your tax splits between the municipal, school and county levies, so you can see
+                  which budget drove the change.</li>
+                <li><b>Apply for relief you qualify for.</b> New Jersey runs <a href="https://www.nj.gov/treasury/taxation/anchor/index.shtml" target="_blank" rel="noopener">ANCHOR</a>
+                  (for homeowners and renters), <a href="https://www.nj.gov/treasury/taxation/staynj/index.shtml" target="_blank" rel="noopener">Stay NJ</a> (age 65 and over) and the
+                  <a href="https://www.nj.gov/treasury/taxation/ptr/index.shtml" target="_blank" rel="noopener">Senior Freeze</a>. Senior, disabled and veteran
+                  deductions are applied on the bill; ask the Tax Assessor. <a href="https://www.nj.gov/treasury/taxation/relief.shtml" target="_blank" rel="noopener">All state programs</a>.</li>
+              </ul>
+            </div>
+          </details>
+          <details>
+            <summary>Will a successful appeal lower my future bills too?</summary>
+            <div className="prose">
+              <p>Usually yes. A county board judgment generally holds for the next two years as well (the Freeze Act), unless the city
+                revalues all properties. Your tax still moves with the rate each year.</p>
+            </div>
+          </details>
+        </div>
+      </section>
+
       <section className="card" aria-labelledby="h-contacts">
         <header><span className="eyebrow">Contacts</span><h2 id="h-contacts">Who to contact</h2></header>
         <div className="contacts">
