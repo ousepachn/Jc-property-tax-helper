@@ -12,6 +12,7 @@ Nothing here prints connection strings or keys.
 import os
 import re
 import sqlite3
+import time
 import zlib
 from pathlib import Path
 from urllib.parse import quote
@@ -132,6 +133,14 @@ class SqliteRawStore:
     def __init__(self, db):
         self.db = db
 
+    def path(self, cd, account_id):
+        return f"{cd}/{account_id}"
+
+    def names(self, cd):
+        """Paths of the responses already stored for a town."""
+        return {self.path(cd, a) for (a,) in self.db.execute(
+            "SELECT account_id FROM raw_responses WHERE county_district=?", (cd,))}
+
     def put(self, cd, account_id, ts, text):
         self.db.execute("""INSERT INTO raw_responses VALUES (?,?,?,?)
                            ON CONFLICT (county_district, account_id) DO UPDATE SET
@@ -150,6 +159,8 @@ class SqliteRawStore:
 class SupabaseRawStore:
     """Raw responses as objects in a private Supabase Storage bucket: <town>/<account>.json.z"""
 
+    RETRY_DELAYS = (2, 5, 15, 30, 60)   # seconds between attempts on 429 / 5xx / network errors
+
     def __init__(self, url, key, bucket=RAW_BUCKET, session=None):
         import requests
 
@@ -160,8 +171,43 @@ class SupabaseRawStore:
         if key.startswith("eyJ"):   # legacy service_role JWT; new sb_secret_ keys go in apikey only
             self.http.headers["Authorization"] = f"Bearer {key}"
 
-    def _path(self, cd, account_id):
+    def path(self, cd, account_id):
         return f"{cd}/{quote(account_id.strip().replace(' ', '_'), safe='')}.json.z"
+
+    _path = path
+
+    def _retry(self, send):
+        """Send, retrying temporary failures (Storage answers 503 under load)."""
+        import requests
+
+        for delay in (*self.RETRY_DELAYS, None):
+            try:
+                r = send()
+                if r.status_code != 429 and r.status_code < 500:
+                    return r
+            except requests.RequestException:
+                if delay is None:
+                    raise
+                r = None
+            if delay is None:
+                return r
+            time.sleep(delay)
+
+    def names(self, cd):
+        """Paths of the objects already in the bucket for a town (1,000 per listing request)."""
+        found, offset = set(), 0
+        while True:
+            r = self._retry(lambda: self.http.post(
+                f"{self.base}/object/list/{self.bucket}",
+                json={"prefix": f"{cd}/", "limit": 1000, "offset": offset, "sortBy": {"column": "name", "order": "asc"}},
+                timeout=60))
+            if r.status_code != 200:
+                raise RuntimeError(f"listing the raw-response bucket failed: HTTP {r.status_code}")
+            page = r.json()
+            found.update(f"{cd}/{o['name']}" for o in page)
+            if len(page) < 1000:
+                return found
+            offset += 1000
 
     def ensure_bucket(self):
         r = self.http.get(f"{self.base}/bucket/{self.bucket}", timeout=30)
@@ -175,11 +221,12 @@ class SupabaseRawStore:
             raise RuntimeError(f"could not create storage bucket {self.bucket}: HTTP {r.status_code}")
 
     def put(self, cd, account_id, ts, text):
-        r = self.http.post(f"{self.base}/object/{self.bucket}/{self._path(cd, account_id)}",
-                           data=zlib.compress(text.encode("utf-8"), 9),
-                           headers={"Content-Type": "application/octet-stream", "x-upsert": "true"}, timeout=60)
-        if r.status_code not in (200, 201):
-            raise RuntimeError(f"raw upload failed: HTTP {r.status_code}")
+        body = zlib.compress(text.encode("utf-8"), 9)
+        r = self._retry(lambda: self.http.post(
+            f"{self.base}/object/{self.bucket}/{self.path(cd, account_id)}", data=body,
+            headers={"Content-Type": "application/octet-stream", "x-upsert": "true"}, timeout=60))
+        if r is None or r.status_code not in (200, 201):
+            raise RuntimeError(f"raw upload failed: HTTP {getattr(r, 'status_code', 'no response')}")
 
     def get(self, cd, account_id):
         r = self.http.get(f"{self.base}/object/{self.bucket}/{self._path(cd, account_id)}", timeout=60)

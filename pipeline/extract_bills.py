@@ -415,15 +415,28 @@ IMPORT_CHUNK = 5000
 
 
 def cmd_import_sqlite(db, args):
-    """Copy an existing crawler SQLite file (e.g. the old portal-data release) into this store."""
+    """Copy an existing crawler SQLite file (e.g. the old portal-data release) into this store.
+
+    Safe to re-run: tables are upserted, and raw responses already in the store are skipped, so an
+    interrupted copy resumes. --raw-only skips the tables (when only the raw copy was interrupted)."""
     if not Path(args.source).exists():
         sys.exit(f"{args.source} not found")
     src = connect(Path(args.source))   # also brings an older file up to the current columns
     raw = raw_store(db)
     if hasattr(raw, "ensure_bucket"):
         raw.ensure_bucket()
+    if not args.raw_only:
+        import_tables(db, src)
+    if args.skip_raw or raw is None:
+        print("raw responses: skipped" + ("" if args.skip_raw else " (no raw store configured)"))
+        return
+    import_raw(db, src, raw)
+
+
+def import_tables(db, src):
     for table, key in (("accounts", "county_district, account_id"), ("index_progress", "county_district")):
-        cols = [c for c in src.columns(table) if c in set(db.columns(table))]
+        # raw_fetched_at is set only once a response is actually in this store (import_raw)
+        cols = [c for c in src.columns(table) if c in set(db.columns(table)) and c != "raw_fetched_at"]
         upd = ", ".join(f"{c}=excluded.{c}" for c in cols if c not in key)
         sql = (f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({','.join('?' * len(cols))}) "
                f"ON CONFLICT ({key}) DO UPDATE SET {upd}")
@@ -443,19 +456,40 @@ def cmd_import_sqlite(db, args):
         db.commit()
         n += len(rows)
     print(f"bills: {n:,} rows")
-    if args.skip_raw or raw is None:
-        print("raw responses: skipped" + ("" if args.skip_raw else " (no raw store configured)"))
-        return
-    source_raw, n = SqliteRawStore(src), 0
-    for cd, account_id, ts in src.execute("SELECT county_district, account_id, fetched_at FROM raw_responses").fetchall():
-        raw.put(cd, account_id, ts, source_raw.get(cd, account_id))
-        db.execute("UPDATE accounts SET raw_fetched_at=? WHERE county_district=? AND account_id=?", (ts, cd, account_id))
-        n += 1
-        if n % 500 == 0:
-            db.commit()
-            print(f"  {n:,} raw responses copied", flush=True)
+
+
+def import_raw(db, src, raw):
+    """Copy raw responses that the store doesn't have yet, and mark exactly the ones it has."""
+    rows = src.execute("SELECT county_district, account_id, fetched_at FROM raw_responses").fetchall()
+    have = set()
+    for cd in sorted({r[0] for r in rows}):
+        have |= raw.names(cd)
+    done = [(ts, cd, a) for cd, a, ts in rows if raw.path(cd, a) in have]
+    todo = [(cd, a, ts) for cd, a, ts in rows if raw.path(cd, a) not in have]
+    mark = "UPDATE accounts SET raw_fetched_at=? WHERE county_district=? AND account_id=?"
+    for i in range(0, len(done), IMPORT_CHUNK):
+        db.executemany(mark, done[i:i + IMPORT_CHUNK])
+    # an earlier, interrupted import may have marked responses that never arrived: clear every mark
+    # in these towns that has no object behind it
+    stale = []
+    for cd in sorted({r[0] for r in rows}):
+        stale += [(None, cd, a) for (a,) in db.execute(
+            "SELECT account_id FROM accounts WHERE county_district=? AND raw_fetched_at IS NOT NULL", (cd,))
+            if raw.path(cd, a) not in have]
+    for i in range(0, len(stale), IMPORT_CHUNK):
+        db.executemany(mark, stale[i:i + IMPORT_CHUNK])
     db.commit()
-    print(f"raw responses: {n:,}")
+    print(f"raw responses: {len(done):,} already stored, {len(todo):,} to copy", flush=True)
+    source_raw, batch = SqliteRawStore(src), []
+    for n, (cd, account_id, ts) in enumerate(todo, 1):
+        raw.put(cd, account_id, ts, source_raw.get(cd, account_id))
+        batch.append((ts, cd, account_id))
+        if n % 500 == 0 or n == len(todo):
+            db.executemany(mark, batch)
+            db.commit()
+            batch = []
+            print(f"  {n:,} of {len(todo):,} copied", flush=True)
+    print(f"raw responses: {len(done) + len(todo):,} stored")
 
 
 def main(argv=None):
@@ -495,6 +529,7 @@ def main(argv=None):
     p = sub.add_parser("import-sqlite", help="copy an existing crawler SQLite file into this store")
     p.add_argument("--from", dest="source", required=True)
     p.add_argument("--skip-raw", action="store_true", help="leave raw responses behind")
+    p.add_argument("--raw-only", action="store_true", help="copy only the raw responses (tables already imported)")
     p = sub.add_parser("raw", help="print the stored raw portal response for a parcel")
     p.add_argument("--pin", required=True)
     args = ap.parse_args(argv)

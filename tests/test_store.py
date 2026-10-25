@@ -26,8 +26,16 @@ class MemoryRaw:
 
     def __init__(self):
         self.objects = {}
+        self.puts = 0
+
+    def path(self, cd, account_id):
+        return f"{cd}/{account_id}"
+
+    def names(self, cd):
+        return {self.path(c, a) for c, a in self.objects if c == cd}
 
     def put(self, cd, account_id, ts, text):
+        self.puts += 1
         self.objects[(cd, account_id)] = text
 
     def get(self, cd, account_id):
@@ -153,6 +161,7 @@ class FakeResponse:
 class FakeSession:
     def __init__(self):
         self.headers, self.objects, self.calls = {}, {}, []
+        self.fail_next = 0
 
     def get(self, url, timeout=None):
         self.calls.append(("GET", url))
@@ -165,6 +174,13 @@ class FakeSession:
         self.calls.append(("POST", url, json, headers))
         if url.endswith("/bucket"):
             return FakeResponse(200)
+        if "/object/list/" in url:
+            prefix = f"{store.RAW_BUCKET}/{json['prefix']}"
+            names = sorted(k[len(prefix):] for k in self.objects if k.startswith(prefix))
+            return FakeResponse(200, js=[{"name": n} for n in names[json["offset"]:json["offset"] + json["limit"]]])
+        if self.fail_next:
+            self.fail_next -= 1
+            return FakeResponse(503)
         self.objects[url.split("/object/", 1)[1]] = data
         return FakeResponse(200)
 
@@ -241,3 +257,35 @@ def test_fetch_writes_slim_bills_and_account_source(tmp_path, monkeypatch):
     lines = (tmp_path / "x" / "bills.csv").read_text().splitlines()
     assert lines[0] == EXPORT_HEADER and len(lines) == 5
     assert lines[1].split(",")[2] == "0910_1_1"
+
+
+def test_supabase_store_lists_and_retries(monkeypatch):
+    monkeypatch.setattr(store.SupabaseRawStore, "RETRY_DELAYS", (0, 0))
+    s = FakeSession()
+    rs = store.SupabaseRawStore("https://x", "sb_secret_k", session=s)
+    s.fail_next = 2                                                # two 503s, then it goes through
+    rs.put("0906", "1", "t", "a")
+    rs.put("0906", "2", "t", "b")
+    assert rs.names("0906") == {"0906/1.json.z", "0906/2.json.z"} and rs.names("0910") == set()
+    s.fail_next = 5
+    with pytest.raises(RuntimeError, match="HTTP 503"):
+        rs.put("0906", "3", "t", "c")
+
+
+@needs_pg
+def test_import_resumes_raw_copy(pg, monkeypatch, tmp_path):
+    conn, raw = pg
+    p = FakePortal(n=3)
+    monkeypatch.setattr(extract_bills, "portal_for", lambda town, session: p)
+    src = tmp_path / "old.sqlite"
+    extract_bills.main(["--db", str(src), "index", "--town", "union-city"])
+    extract_bills.main(["--db", str(src), "fetch", "--town", "union-city", "--include-owners", "--keep-raw"])
+    # an earlier run copied the tables and one response, then died
+    run(monkeypatch, p, "import-sqlite", "--from", str(src), "--skip-raw")
+    assert conn.execute("SELECT COUNT(*) FROM accounts WHERE raw_fetched_at IS NOT NULL").fetchone()[0] == 0
+    raw.objects[("0910", "1")] = "RAW 1"
+    conn.execute("UPDATE accounts SET raw_fetched_at='stale'")      # marks left by the old import
+    run(monkeypatch, p, "import-sqlite", "--from", str(src), "--raw-only")
+    assert raw.puts == 1 and set(raw.objects) == {("0910", "1"), ("0910", "3")}
+    marked = dict(conn.execute("SELECT account_id, raw_fetched_at IS NOT NULL FROM accounts").fetchall())
+    assert marked == {"1": True, "2": False, "3": True}             # 2 is Daniel's Law: never stored
