@@ -34,6 +34,10 @@ RATIOS = {
     "0910": {"avg": 0.9411, "lo": 0.7999, "hi": 1.0823},   # Union City
 }
 SQFT_RANGE = (300, 20000)
+# "likely" needs comparable sales that agree: (max - min) / median of their $/sq ft at most this
+MAX_SPREAD_LIKELY = 0.35
+RENOVATION_NOTE = ("This property had an added assessment or building work in the last 5 years. Renovated "
+                   "properties often sell above the average-condition sales used here, so the estimate may be low.")
 
 
 def era(year_built):
@@ -216,8 +220,11 @@ def median(xs):
     return None if not n else xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2
 
 
-def appeal(subject, sale_match):
-    """Rough appeal screen from comparable sales' price per square foot, against the town's 2027 range."""
+def appeal(subject, sale_match, renovated=False):
+    """Rough appeal screen from comparable sales' price per square foot, against the town's 2027 range.
+
+    renovated: the property had an added assessment or completed building work in the last 5 years;
+    its value is then likely above the average-condition sales, so "likely" becomes "possible"."""
     comps = [p for p, _, _ in sale_match.props]
     rr = RATIOS.get(subject.pin[:4])
     if not rr:
@@ -231,13 +238,22 @@ def appeal(subject, sale_match):
     value = median(ppsf) * subject.sq_ft
     ratio = subject.assessment / value
     spread = (max(ppsf) - min(ppsf)) / median(ppsf)
+    notes = []
     if ratio > rr["hi"]:
-        score_ = "likely" if spread <= 0.5 else "possible"
+        score_ = "likely"
+        if spread > MAX_SPREAD_LIKELY:
+            score_ = "possible"
+            notes.append("The comparable sales vary widely in price per square foot, so the estimate is uncertain.")
+        if renovated:
+            score_ = "possible"
+            notes.append(RENOVATION_NOTE)
     elif ratio > rr["avg"]:
         score_ = "possible"
+        if renovated:
+            notes.append(RENOVATION_NOTE)
     else:
         score_ = "unlikely"
-    return {"score": score_, "estimated_value": round(value, -3), "ratio": round(ratio, 4),
+    return {"score": score_, "notes": notes, "estimated_value": round(value, -3), "ratio": round(ratio, 4),
             "median_ppsf": round(median(ppsf)), "ppsf_spread": round(spread, 2), "sales": len(comps),
             "size_band": sale_match.size_band, "radius_mi": sale_match.radius_mi,
             "ratio_range": rr,

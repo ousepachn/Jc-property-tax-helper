@@ -77,3 +77,18 @@ def test_appeal_screen_uses_the_towns_range():
     assert C.appeal(prop("0906_1_1", assessment=700_000), match)["score"] == "possible"
     thin = C.Match(match.props[:2], 0.10, 1.0)
     assert C.appeal(jc, thin)["score"] == "not_enough_data"
+
+
+def test_likely_needs_agreeing_sales_and_no_recent_renovation():
+    def match(prices):
+        comps = [prop(f"0906_S{i}", sq_ft=2000, sale=("2026-01-01", v)) for i, v in enumerate(prices)]
+        return C.Match([(p, 0.1, 1.0) for p in comps], 0.10, 0.25)
+    jc = prop("0906_1_1", assessment=800_000)
+    tight = match([950_000, 1_000_000, 1_050_000])           # spread 10%
+    wide = match([700_000, 1_000_000, 1_300_000])            # spread 60%
+    assert C.appeal(jc, tight)["score"] == "likely"
+    r = C.appeal(jc, wide)
+    assert r["score"] == "possible" and "vary widely" in r["notes"][0]
+    r = C.appeal(jc, tight, renovated=True)
+    assert r["score"] == "possible" and r["notes"] == [C.RENOVATION_NOTE]
+    assert C.appeal(prop("0906_1_1", assessment=600_000), tight, renovated=True)["score"] == "unlikely"
