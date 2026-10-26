@@ -1,7 +1,10 @@
 # Hosting: Supabase database + public repository
 
-> Moving to Neon: see [neon.md](neon.md) for the website's database, owner accounts and file
-> storage. The steps below still describe the Supabase setup the pipeline uses today.
+> **The database is now on Neon** (see [neon.md](neon.md)): the `DATABASE_URL` secret points at Neon's
+> direct connection string, the `portal` tables were copied over on Oct 26, 2026 with matching row
+> counts, and the repository is public. Supabase is still used for raw portal responses (Storage
+> bucket `portal-raw`, secrets `SUPABASE_URL` and `SUPABASE_SECRET_KEY`); its database is a fallback
+> copy until it's deleted. The steps below describe the original Supabase setup.
 
 The crawler's data lives in a Supabase project. The GitHub repository holds only code, so it can be
 public, and public repositories get unlimited free GitHub Actions minutes.
