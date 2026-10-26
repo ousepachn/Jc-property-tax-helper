@@ -9,6 +9,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@neon/config": "^1.9.4",
+    "@neon/env": "^1.6.5",
     "next": "15.5.27",
     "postgres": "3.4.9",
     "react": "19.1.9",
