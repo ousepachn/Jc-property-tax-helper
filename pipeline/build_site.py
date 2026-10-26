@@ -191,6 +191,7 @@ def build(db, cd, positions, today=None):
                 "city_percentile": percentile(group, your_change), "city_group_size": len(group),
                 "list": [{"pin": q.pin, "address": q.address, "unit": q.extra["qual"] or None, "sq_ft": q.sq_ft,
                           "year_built": q.year_built, "miles": round(d, 2),
+                          "lat": round(q.lat, 6), "lon": round(q.lon, 6),
                           "change": None if change(tax.get(q.pin, {}), base_year) is None
                           else round(change(tax.get(q.pin, {}), base_year), 4)} for q, d in nb[:SHOW_NEIGHBORS]],
             }
@@ -200,7 +201,8 @@ def build(db, cd, positions, today=None):
             renovated = any(y >= renovated_since for y in added.get(pin, ()))
             result = C.appeal(p, sm, renovated=renovated)
             result["comparable_sales"] = [
-                {"address": q.address, "unit": q.extra["qual"] or None, "sq_ft": q.sq_ft, "year_built": q.year_built,
+                {"pin": q.pin, "address": q.address, "unit": q.extra["qual"] or None, "sq_ft": q.sq_ft,
+                 "year_built": q.year_built, "lat": round(q.lat, 6), "lon": round(q.lon, 6),
                  "sale_date": q.sale_date, "price": r0(q.sale_price), "ppsf": r0(q.sale_price / q.sq_ft),
                  "miles": round(d, 2)} for q, d, _ in sm.props]
             rec["appeal"] = result

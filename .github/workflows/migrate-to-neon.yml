@@ -1,0 +1,63 @@
+name: Copy the database to Neon (one-off)
+
+# Runs scripts/copy_to_neon.sh: copies schema `portal` from the current database (secret
+# DATABASE_URL, Supabase) to Neon (secret NEON_DATABASE_URL, the *direct* connection string, not the
+# -pooler one), checks every table's row count and Neon's size against the Free plan's 1 GB. The
+# same script runs from a laptop.
+#
+# After it passes: set DATABASE_URL to the same value as NEON_DATABASE_URL, delete
+# NEON_DATABASE_URL, and the scheduled jobs write to Neon. See docs/neon.md.
+#
+# It never overwrites: if Neon already has a portal schema, it stops, unless run by hand with
+# "replace" ticked.
+
+on:
+  workflow_dispatch:
+    inputs:
+      replace:
+        description: "Drop Neon's existing portal schema first"
+        type: boolean
+        default: false
+  push:
+    branches: [claude/quirky-wozniak-ywczlo]
+    paths: [.github/workflows/migrate-to-neon.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migrate-to-neon
+
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SOURCE: ${{ secrets.DATABASE_URL }}
+      TARGET: ${{ secrets.NEON_DATABASE_URL }}
+      PGCONNECT_TIMEOUT: "20"
+    steps:
+      - name: Check secrets
+        id: check
+        run: |
+          if [ -z "$TARGET" ]; then
+            echo "::warning::NEON_DATABASE_URL is not set yet; nothing copied. Add it (docs/neon.md), then re-run."
+            echo "go=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ -z "$SOURCE" ]; then echo "::error::DATABASE_URL is not set"; exit 1; fi
+          echo "go=true" >> "$GITHUB_OUTPUT"
+
+      - name: Install Postgres 18 client
+        if: steps.check.outputs.go == 'true'
+        run: |
+          sudo apt-get update -q && sudo apt-get install -yq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -yq postgresql-client-18
+          echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.go == 'true'
+
+      - name: Copy schema portal, compare row counts, report size
+        if: steps.check.outputs.go == 'true'
+        run: scripts/copy_to_neon.sh ${{ inputs.replace && '--replace' || '' }}

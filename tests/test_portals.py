@@ -17,7 +17,7 @@ FIX = Path(__file__).parent / "fixtures"
 def test_pin_helpers_match_pams_pin_format():
     assert pin_part("00301", "    ") == "301"
     assert pin_part("00001", "  01") == "1.01"
-    assert make_pin("0910", "39.01", "9", "C0602   ") == "0910_39.01_9_C0602"
+    assert make_pin("0910", "88.02", "7", "C0310   ") == "0910_88.02_7_C0310"
     assert make_pin("0906", "301", "1", "") == "0906_301_1"
 
 
@@ -36,8 +36,8 @@ def test_categorize(kind, category):
 def test_rpc_body_matches_browser_request():
     captured = ("7|0|9|https://wipp.edmundsassoc.com/Wipp/wipp/|D5E8FE1926F7761CD5A2EA6F4F52F53E|"
                 "wipp.client.WippService|taxBlqIdSearch|java.lang.String/2004016611|Z|0910|"
-                "   39  01    9       C0603   ||1|2|3|4|4|5|5|5|6|7|8|9|1|")
-    assert rpc_body("taxBlqIdSearch", [("S", "0910"), ("S", "   39  01    9       C0603   "),
+                "   88  02    7       C0311   ||1|2|3|4|4|5|5|5|6|7|8|9|1|")
+    assert rpc_body("taxBlqIdSearch", [("S", "0910"), ("S", "   88  02    7       C0311   "),
                                        ("S", ""), ("Z", True)]) == captured
 
 
@@ -53,7 +53,7 @@ def test_parse_response_handles_js_escapes_and_longs():
 
 
 def test_parse_key():
-    assert parse_key("   39  01    9       C0602   ") == ("39.01", "9", "C0602")
+    assert parse_key("   88  02    7       C0310   ") == ("88.02", "7", "C0310")
     assert parse_key("  100        2               ") == ("100", "2", "")
 
 
@@ -116,15 +116,15 @@ def test_hls_list_row_to_account():
 
 
 def test_hls_parse_details_fixture():
-    vm = json.loads((FIX / "hls_jc_313_new_york.json").read_text())["accountInquiryVM"]
-    acct = Account("0906", "98624", "0906_2306_46")
+    vm = json.loads((FIX / "hls_jc_sample.json").read_text())["accountInquiryVM"]
+    acct = Account("0906", "90001", "0906_9901_1")
     bills = parse_details(vm, acct, "hls:JerseyCity")
-    assert acct.net_taxable == 520400
+    assert acct.net_taxable == 450000
     tax = lambda y: round(sum(b.amount for b in bills if b.tax_year == y and b.category == "property_tax"), 2)  # noqa: E731
-    assert tax(2025) == 12151.34          # equals MOD-IV 2026 last_year_tax
-    assert tax(2026) == 13827.03          # 520,400 x 2.657%
+    assert tax(2025) == 10507.49          # 450,000 x 2.335%
+    assert tax(2026) == 11956.50          # 450,000 x 2.657%
     q26 = {b.quarter: b.amount for b in bills if b.tax_year == 2026 and b.kind == "tax"}
-    assert q26 == {1: 3037.84, 2: 3037.83, 3: 3852.26, 4: 3899.10}
+    assert q26 == {1: 2626.88, 2: 2626.87, 3: 3331.12, 4: 3371.63}
     assert all(b.amount != 0 for b in bills)
 
 
@@ -157,11 +157,11 @@ def test_delinquency_level():
 
 
 def test_hls_balances_and_flags():
-    vm = json.loads((FIX / "hls_jc_313_new_york.json").read_text())["accountInquiryVM"]
-    acct = Account("0906", "98624", "0906_2306_46")
+    vm = json.loads((FIX / "hls_jc_sample.json").read_text())["accountInquiryVM"]
+    acct = Account("0906", "90001", "0906_9901_1")
     bills = parse_details(vm, acct, "hls:JerseyCity")
     q = {(b.tax_year, b.quarter): b for b in bills if b.kind == "tax"}
-    assert q[(2026, 4)].balance == 3899.10          # due Nov 1, unpaid when fetched
+    assert q[(2026, 4)].balance == 3371.63          # due Nov 1, unpaid when fetched
     assert q[(2026, 3)].balance == 0.0
     assert acct.portal_delinquent is False and acct.pending_tax_sale is False
     # its 2025 tax-sale certificate was redeemed: history, not an open lien

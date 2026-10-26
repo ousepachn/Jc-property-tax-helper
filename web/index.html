@@ -230,7 +230,7 @@ footer.foot { margin-top: 30px; padding-top: 14px; border-top: 1px solid var(--l
       <div class="search glass" role="search">
         <label for="q">Find a property</label>
         <div class="field"><span class="icon" aria-hidden="true"></span>
-          <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="e.g. 313 New York Ave" aria-controls="results"></div>
+          <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="e.g. 280 Grove St" aria-controls="results"></div>
         <ul id="results" class="results" hidden></ul>
         <div id="status" class="status-line" aria-live="polite">Loading 71,000 properties…</div>
       </div>
@@ -965,7 +965,7 @@ function renderResults() {
   if (!INDEX.length) return;
   if (!q.value.trim()) { list.hidden = true; $("#status").textContent = ""; return; }
   const rs = search(q.value);
-  if (!rs.length) { list.hidden = true; $("#status").textContent = "No match. Try the house number and street, e.g. 38 Jefferson."; return; }
+  if (!rs.length) { list.hidden = true; $("#status").textContent = "No match. Try the house number and street, e.g. 280 Grove."; return; }
   $("#status").textContent = "";
   list.innerHTML = rs.map((r, i) => `<li style="--i:${i}"><button type="button" data-pin="${esc(r[0])}"><span>${esc(r[1])}${r[2] ? " · " + esc(unitLabel(r[2])) : ""}</span>
     <span class="r-type">${esc(TYPE_LABEL[r[3]] || "")}</span></button></li>`).join("");

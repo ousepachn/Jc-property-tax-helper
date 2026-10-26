@@ -9,7 +9,7 @@ from owners import classify, classify_all, parse_street, same_address  # noqa: E
 
 
 @pytest.mark.parametrize("addr,expected", [
-    ("413-15 9TH ST #602", ({413, 414, 415}, "9TH ST")),
+    ("121-23 MAIN ST #310", ({121, 122, 123}, "MAIN ST")),
     ("1021 Grand Street, Apt 4A", ({1021}, "GRAND ST")),
     ("307 SECOND ST", ({307}, "2ND ST")),
     ("PO BOX 123", (set(), "")),
@@ -19,7 +19,7 @@ def test_parse_street(addr, expected):
 
 
 @pytest.mark.parametrize("prop,mail,same", [
-    ("413-15 9TH ST", "413 9TH ST #602", True),
+    ("121-23 MAIN ST", "121 MAIN ST #310", True),
     ("1021 GRAND ST", "1021 GRAND STREET UNIT 4", True),
     ("307 SECOND ST", "307 2ND ST", True),
     ("307 SECOND ST", "309 2ND ST", False),
@@ -64,7 +64,7 @@ def test_care_of_party_groups_single_asset_llcs():
 
 @pytest.mark.parametrize("name,expected", [
     ("PUBLIC SERVICE ELECTRIC & GAS CO", "corporate"),
-    ("JEFFERSON ASSOCIATION LLC", "small_llc"),
+    ("EXAMPLE ASSOCIATION LLC", "small_llc"),
     ("58 EIGHT ST CONDO ASSOC", "public_nonprofit"),
 ])
 def test_name_rules(name, expected):
@@ -105,7 +105,7 @@ def test_web_builder_helpers():
     import numpy as np
     from build_web_data import Grid, tidy_address, unit_of
     assert tidy_address("141 LOGAN AV") == "141 Logan Ave" and tidy_address("36 MC ADOO AVE.") == "36 McAdoo Ave"
-    assert unit_of("0906_11_2_C0602") == "C0602" and unit_of("0906_11_2") == ""
+    assert unit_of("0906_11_2_C0310") == "C0310" and unit_of("0906_11_2") == ""
     xs, ys = np.array([0.0, 0.3, 2.0, 0.1]), np.array([0.0, 0.0, 0.0, 0.1])
     idx, d = Grid(xs, ys, [0, 1, 2, 3]).within(0.0, 0.0, 0.8)
     assert list(idx) == [0, 3, 1] and d[0] == 0

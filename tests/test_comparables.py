@@ -21,7 +21,7 @@ def test_parsers():
     assert C.units_from("", dwellings=2) == 2
     assert C.stories_from("2.5S-F-D-1U-H") == 2.5 and C.construction_from("2S-F-D-2U") == "F"
     assert C.kind("2", "", 1) == "single_family" and C.kind("2", "", 3) == "3_family"
-    assert C.kind("2", "C0602", None) == "condo" and C.kind("4A", "", None) is None
+    assert C.kind("2", "C0310", None) == "condo" and C.kind("4A", "", None) is None
     assert C.era(1880) == "pre1940" and C.era(1975) == "1940_1999" and C.era(2006) == "2000plus"
 
 

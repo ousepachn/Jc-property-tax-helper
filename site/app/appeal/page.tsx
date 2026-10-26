@@ -128,6 +128,111 @@ export default function AppealGuide() {
         </section>
       </div>
 
+
+      <section className="card" aria-labelledby="h-faq">
+        <header><span className="eyebrow">Common questions</span><h2 id="h-faq">Questions owners ask</h2></header>
+        <div className="faq">
+          <details open>
+            <summary>My tax went up because the tax rate rose. Can I appeal the rate?</summary>
+            <div className="prose">
+              <p>No. An appeal can only change your <b>assessment</b>, which sets your share of the total. The rate is set each
+                year by dividing what the city, the schools and the county need to raise by the total assessed value of all
+                property in Jersey City. It is the same for every property, so there is nothing about your home to appeal.</p>
+              <p>Jersey City&apos;s rate went from <b>$1.604 per $100</b> of assessed value in 2021 to <b>$2.657</b> in 2026, a 66% rise
+                that every property paid.</p>
+            </div>
+          </details>
+          <details open>
+            <summary>How much of my increase came from the rate, and how much from my assessment?</summary>
+            <div className="prose">
+              <p>Split the change in two. Example: a home assessed at $500,000 in 2021 and $600,000 in 2026 (an illustration,
+                using Jersey City&apos;s actual tax rates).</p>
+              <div className="split">
+                <div><span>2021 tax: $500,000 assessment × 1.604%</span><span className="num">$8,020</span></div>
+                <div><span>2026 tax: $600,000 assessment × 2.657%</span><span className="num">$15,942</span></div>
+                <div className="tot"><span>Increase</span><span className="num">$7,922</span></div>
+                <div><span><b>From the rate:</b> the 2021 assessment at the 2026 rate, $500,000 × (2.657% − 1.604%)</span><span className="num">$5,265</span></div>
+                <div><span><b>From the assessment:</b> $100,000 higher, × the 2026 rate of 2.657%</span><span className="num">$2,657</span></div>
+              </div>
+              <p>The <b>$5,265 from the rate can&apos;t be appealed.</b> The <b>$2,657 from the assessment can</b>, if the assessment is
+                above the allowed range for what the home was worth. An assessment usually rises after a renovation (an added
+                assessment) or a citywide revaluation. The appeal check on each property page tells you whether it looks too high.</p>
+              <p className="small muted">To do this for your home, take your assessment and tax for two years from your bills or the
+                county records search. The tax rate is your tax divided by your assessment.</p>
+            </div>
+          </details>
+          <details>
+            <summary>If I can&apos;t appeal the rate, what can I do about it?</summary>
+            <div className="prose">
+              <ul>
+                <li><b>Speak at budget hearings.</b> The rate follows the budgets. The City Council adopts the municipal budget, the
+                  Board of Education the school budget, and the Hudson County Board of Commissioners the county budget, each at public
+                  meetings where residents can comment.</li>
+                <li><b>Read your bill.</b> It shows how your tax splits between the municipal, school and county levies, so you can see
+                  which budget drove the change.</li>
+                <li><b>Apply for relief you qualify for.</b> New Jersey runs <a href="https://www.nj.gov/treasury/taxation/anchor/index.shtml" target="_blank" rel="noopener">ANCHOR</a>
+                  (for homeowners and renters), <a href="https://www.nj.gov/treasury/taxation/staynj/index.shtml" target="_blank" rel="noopener">Stay NJ</a> (age 65 and over) and the
+                  <a href="https://www.nj.gov/treasury/taxation/ptr/index.shtml" target="_blank" rel="noopener">Senior Freeze</a>. Senior, disabled and veteran
+                  deductions are applied on the bill; ask the Tax Assessor. <a href="https://www.nj.gov/treasury/taxation/relief.shtml" target="_blank" rel="noopener">All state programs</a>.</li>
+              </ul>
+            </div>
+          </details>
+          <details>
+            <summary>My assessment hasn&apos;t changed in years. Can I still appeal it?</summary>
+            <div className="prose">
+              <p>Yes, but only in the yearly filing window. Each year&apos;s assessment counts as new, even when the number is the same,
+                so it never gets locked in. You appeal the <b>coming</b> year&apos;s assessment after the notice arrives (by February 1)
+                and before <b>April 1</b> (or 45 days after the notices are mailed, if that is later). After the deadline, that
+                year can&apos;t be appealed; the next chance is the following year.</p>
+              <p><b>Example:</b> a home has been assessed at $600,000 since 2024. In October 2026 it is too late to appeal 2026 (the
+                deadline was April 1, 2026). The owner can appeal the 2027 assessment by April 1, 2027, arguing what the home was
+                worth on October 1, 2026.</p>
+              <ul>
+                <li><b>After a successful appeal</b>, the board&apos;s judgment usually freezes the assessment for the next two years
+                  (the Freeze Act): the assessor can&apos;t raise it unless you add improvements or the city revalues everything. You can
+                  still appeal during those years, and the freeze ends after the second.</li>
+                <li><b>Added or omitted assessment bills</b> (see the next question) have their own deadline: December 1 of the year
+                  you are billed.</li>
+                <li><b>A factual mistake</b> on your property record, like the wrong floor area or room count, can be raised with the
+                  Tax Assessor at any time.</li>
+              </ul>
+            </div>
+          </details>
+          <details>
+            <summary>I renovated. When will my taxes change, and will I get a back bill?</summary>
+            <div className="prose">
+              <p>Once the work is finished, the assessor adds its value with an <b>added assessment</b>, billed for the whole months
+                after completion. When the bill comes depends on when the work finished:</p>
+              <ul>
+                <li><b>Finished January 1 to September 30:</b> billed in the fall of the same year, for the rest of that year.</li>
+                <li><b>Finished October 1 to December 31:</b> billed in the fall of the <b>following</b> year, for the rest of the
+                  completion year plus the whole following year (that year&apos;s assessment was set on October 1, before the work was done).</li>
+                <li>From then on, the work is part of your regular assessment.</li>
+                <li>If the assessor misses it, an <b>omitted added assessment</b> can be billed later, but only one year back.</li>
+              </ul>
+              <p><b>Example:</b> work finished in November 2025, and the assessor adds $50,000 of assessed value (an illustration;
+                the real amount depends on the work).</p>
+              <div className="split">
+                <div><span>December 2025 (1 month): $50,000 × 2.335% ÷ 12</span><span className="num">$97</span></div>
+                <div><span>All of 2026: $50,000 × 2.657%</span><span className="num">$1,329</span></div>
+                <div className="tot"><span>Added assessment bill, fall 2026</span><span className="num">$1,426</span></div>
+                <div><span>2027 onward: in the regular assessment, at the year&apos;s rate</span><span className="num">about $1,329 a year</span></div>
+              </div>
+              <p>If that bill isn&apos;t sent until fall 2027, it can cover only 2026; the December 2025 month can no longer be billed.
+                Seeing nothing during the year after the work is normal. Set the money aside, appeal the added assessment by December 1
+                if it looks too high, or ask the Tax Assessor whether one is pending.</p>
+            </div>
+          </details>
+          <details>
+            <summary>Will a successful appeal lower my future bills too?</summary>
+            <div className="prose">
+              <p>Usually yes. A county board judgment generally holds for the next two years as well (the Freeze Act), unless the city
+                revalues all properties. Your tax still moves with the rate each year.</p>
+            </div>
+          </details>
+        </div>
+      </section>
+
       <section className="card" aria-labelledby="h-contacts">
         <header><span className="eyebrow">Contacts</span><h2 id="h-contacts">Who to contact</h2></header>
         <div className="contacts">

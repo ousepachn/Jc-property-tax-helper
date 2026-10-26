@@ -9,15 +9,25 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "next": "15.5.27",
-    "postgres": "3.4.9",
-    "react": "19.1.9",
-    "react-dom": "19.1.9"
+    "@aws-sdk/client-s3": "3.1156.0",
+    "@aws-sdk/s3-presigned-post": "3.1156.0",
+    "@aws-sdk/s3-request-presigner": "3.1156.0",
+    "@neon/config": "1.9.4",
+    "@neon/env": "1.6.5",
+    "@neondatabase/auth": "0.7.0-beta",
+    "@neondatabase/serverless": "1.2.0",
+    "files-sdk": "3.1.2",
+    "next": "16.4.3",
+    "react": "19.2.9",
+    "react-dom": "19.2.9"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
-    "@types/react": "19.1.9",
-    "@types/react-dom": "19.1.9",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
     "typescript": "5.9.3"
+  },
+  "overrides": {
+    "zod": "4.6.7"
   }
 }

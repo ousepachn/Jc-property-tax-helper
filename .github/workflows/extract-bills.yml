@@ -10,7 +10,7 @@ name: Extract tax bills
 # tax-roll data), never owner data; keep it that way, since the logs of a public repo are public.
 #
 # Secrets (Settings -> Secrets and variables -> Actions), see docs/hosting.md:
-#   DATABASE_URL         Supabase Session pooler connection string (port 5432)
+#   DATABASE_URL         Neon direct connection string (no -pooler; see docs/neon.md), or Supabase Session pooler (port 5432)
 #   SUPABASE_URL         https://<project>.supabase.co          (for raw responses)
 #   SUPABASE_SECRET_KEY  a secret API key (sb_secret_...)      (for raw responses)
 on:

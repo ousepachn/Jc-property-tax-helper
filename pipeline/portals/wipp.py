@@ -70,7 +70,7 @@ def parse_response(text):
 
 
 def parse_key(key):
-    """'   39  01    9       C0602   ' -> (block '39.01', lot '9', qualifier 'C0602')."""
+    """'   88  02    7       C0310   ' -> (block '88.02', lot '7', qualifier 'C0310')."""
     k = key.ljust(29)
     return pin_part(k[0:5], k[5:9]), pin_part(k[9:14], k[14:18]), k[18:29].strip()
 
