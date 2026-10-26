@@ -1,9 +1,10 @@
 // Upload one of the signed-in owner's documents to Object Storage.
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth/server";
+import { auth, ownerAccountsEnabled } from "@/lib/auth/server";
 import { files, MAX_UPLOAD_BYTES, ownerKey } from "@/lib/storage";
 
 export async function POST(request: Request) {
+  if (!ownerAccountsEnabled()) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const { data: session } = await auth.getSession();
   if (!session?.user) return NextResponse.json({ error: "Sign in first" }, { status: 401 });
   const back = (error?: string) =>

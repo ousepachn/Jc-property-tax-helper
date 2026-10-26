@@ -6,7 +6,7 @@ branch `production`, region `aws-us-east-2`). `site/neon.ts` declares what the b
 | Service | Used for | Code |
 |---|---|---|
 | Postgres | schema `site` (public per-property summaries, written by `build_site.py`); later the pipeline's `portal` tables | `site/lib/data.ts` |
-| Neon Auth | owner accounts: sign-up, sign-in, sign-out, `/account` | `site/lib/auth/server.ts`, `site/proxy.ts`, `site/app/auth/` |
+| Neon Auth | owner accounts: sign-up, sign-in, sign-out, `/account` (off unless `OWNER_ACCOUNTS=on`) | `site/lib/auth/server.ts`, `site/proxy.ts`, `site/app/auth/` |
 | Object Storage | owners' documents, bucket `assets` (private), one prefix per user | `site/lib/storage.ts`, `site/app/api/files/` |
 
 The AI Gateway (`aiGateway: true`) is commented out in `neon.ts`: the Free plan doesn't serve it.
@@ -113,3 +113,28 @@ If it gets close (the copy job warns over 850 MB), trim in this order:
 2. `site` for Hoboken and Union City, when they're added: about 30 MB each; still fits.
 3. Old bills: drop `bills` rows older than the four years the site shows.
 4. Or upgrade to Launch: $0.35 per GB-month beyond the free amount, no minimum.
+
+## Owner accounts switch
+
+Sign-in, `/account` and document uploads are off unless the Vercel variable `OWNER_ACCOUNTS` is `on`
+(redeploy after changing it). While off, those pages and their API routes answer 404, and the
+sign-in/sign-up server actions refuse to run even when called directly.
+
+## Abuse protection
+
+- **Private data is out of the site's reach.** The site connects as `site_reader`, which can read only
+  schema `site` (public per-property summaries). Owner names, mailing addresses, mortgages, payments
+  and liens are in `portal`, which it cannot read. The bucket `assets` is private.
+- **Caching keeps load off the database.** Property pages are built on first visit and cached for an
+  hour; search and map responses are cached at Vercel's edge. Map boxes are widened to a 0.01° grid,
+  so varying them can't send every request to the database.
+- **`site_reader` has a 5-second statement timeout.**
+- **Vercel** mitigates network-level DDoS automatically. Add the rate limit in the dashboard (Firewall
+  → Configure → New rule): paths starting `/api/` **or** `/p/`, rate limit, fixed window, 60 seconds,
+  60 requests, keyed by IP, action "Rate Limit" (429). Under attack, turn on **Attack Challenge Mode**
+  in the same Firewall page.
+- **Worst case is downtime, not a bill.** On the free plans Neon pauses the database when its monthly
+  allowance (compute or 5 GB of data transfer) runs out, and Vercel Hobby pauses the project. Neither
+  charges overages.
+- Security headers: `nosniff`, `X-Frame-Options: DENY`, a strict referrer policy and a locked-down
+  permissions policy.

@@ -33,7 +33,8 @@ export default function MiniMap({ markers }: { markers: Marker[] }) {
 
   useEffect(() => {
     // the map is wider than tall: cover up to 3:1 so the context fills the whole width
-    const halfLat = spanLat * 0.6, halfLon = Math.max(spanLon * 0.6, (spanLat / kx) * 1.6);
+    // (at most 0.08° across: the server widens it to a 0.01° grid and accepts up to 0.1°)
+    const halfLat = Math.min(spanLat * 0.6, 0.04), halfLon = Math.min(Math.max(spanLon * 0.6, (spanLat / kx) * 1.6), 0.04);
     const bbox = [cLat - halfLat, cLon - halfLon, cLat + halfLat, cLon + halfLon].map((v) => v.toFixed(4));
     fetch(`/api/map?bbox=${bbox.join(",")}`)
       .then((r) => (r.ok ? r.json() : []))
