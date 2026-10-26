@@ -1,9 +1,9 @@
 name: Copy the database to Neon (one-off)
 
-# Copies schema `portal` (accounts, bills, county records, owners) from the current database
-# (secret DATABASE_URL, Supabase) to Neon (secret NEON_DATABASE_URL, the *direct* connection string,
-# not the -pooler one), then checks every table's row count and Neon's size against the Free plan's
-# 1 GB. Schema `site` is not copied: Neon already has it, and Build site data rebuilds it daily.
+# Runs scripts/copy_to_neon.sh: copies schema `portal` from the current database (secret
+# DATABASE_URL, Supabase) to Neon (secret NEON_DATABASE_URL, the *direct* connection string, not the
+# -pooler one), checks every table's row count and Neon's size against the Free plan's 1 GB. The
+# same script runs from a laptop.
 #
 # After it passes: set DATABASE_URL to the same value as NEON_DATABASE_URL, delete
 # NEON_DATABASE_URL, and the scheduled jobs write to Neon. See docs/neon.md.
@@ -45,8 +45,6 @@ jobs:
             echo "go=false" >> "$GITHUB_OUTPUT"; exit 0
           fi
           if [ -z "$SOURCE" ]; then echo "::error::DATABASE_URL is not set"; exit 1; fi
-          case "$TARGET" in *-pooler.*) echo "::error::NEON_DATABASE_URL is the pooled URL; use the direct one (no -pooler in the host)"; exit 1;; esac
-          case "$SOURCE" in *neon.tech*) echo "::error::DATABASE_URL already points at Neon; nothing to copy"; exit 1;; esac
           echo "go=true" >> "$GITHUB_OUTPUT"
 
       - name: Install Postgres 18 client
@@ -57,61 +55,9 @@ jobs:
           sudo apt-get install -yq postgresql-client-18
           echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
 
-      - name: Sizes in the current database
+      - uses: actions/checkout@v4
         if: steps.check.outputs.go == 'true'
-        run: |
-          psql "$SOURCE" -X -v ON_ERROR_STOP=1 -c "
-            SELECT c.relname AS table, pg_size_pretty(pg_total_relation_size(c.oid)) AS size, c.reltuples::bigint AS approx_rows
-            FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-            WHERE n.nspname = 'portal' AND c.relkind = 'r' ORDER BY pg_total_relation_size(c.oid) DESC"
 
-      - name: Make room on Neon
+      - name: Copy schema portal, compare row counts, report size
         if: steps.check.outputs.go == 'true'
-        run: |
-          exists=$(psql "$TARGET" -XAtc "SELECT count(*) FROM pg_namespace WHERE nspname = 'portal'")
-          if [ "$exists" != 0 ]; then
-            if [ "${{ inputs.replace }}" = "true" ]; then
-              psql "$TARGET" -X -v ON_ERROR_STOP=1 -c "DROP SCHEMA portal CASCADE"
-            else
-              echo "::error::Neon already has a portal schema. Re-run by hand with 'replace' ticked to overwrite it."; exit 1
-            fi
-          fi
-
-      - name: Copy schema portal
-        if: steps.check.outputs.go == 'true'
-        run: |
-          pg_dump "$SOURCE" --schema=portal --format=custom --no-owner --no-privileges --file=portal.dump
-          ls -l portal.dump
-          pg_restore --dbname="$TARGET" --no-owner --no-privileges --exit-on-error portal.dump
-
-      - name: Lock down and compare row counts
-        if: steps.check.outputs.go == 'true'
-        run: |
-          psql "$TARGET" -X -v ON_ERROR_STOP=1 -c "REVOKE ALL ON SCHEMA portal FROM PUBLIC" >/dev/null
-          for role in site_reader anonymous authenticated; do
-            psql "$TARGET" -XAtc "SELECT 1 FROM pg_roles WHERE rolname = '$role'" | grep -q 1 || continue
-            psql "$TARGET" -X -v ON_ERROR_STOP=1 -c "REVOKE ALL ON SCHEMA portal FROM $role; REVOKE ALL ON ALL TABLES IN SCHEMA portal FROM $role" >/dev/null
-          done
-          bad=0
-          for t in $(psql "$SOURCE" -XAtc "SELECT tablename FROM pg_tables WHERE schemaname = 'portal' ORDER BY 1"); do
-            a=$(psql "$SOURCE" -XAtc "SELECT count(*) FROM portal.\"$t\"")
-            b=$(psql "$TARGET" -XAtc "SELECT count(*) FROM portal.\"$t\"")
-            printf '%-24s supabase %10s   neon %10s\n' "$t" "$a" "$b"
-            [ "$a" = "$b" ] || bad=1
-          done
-          [ "$bad" = 0 ] || { echo "::error::row counts differ (the crawler may have written during the copy); re-run with 'replace'"; exit 1; }
-          psql "$TARGET" -XAtc "SELECT has_schema_privilege('site_reader', 'portal', 'USAGE')" 2>/dev/null | grep -qx t \
-            && { echo "::error::site_reader can read portal"; exit 1; } || true
-
-      - name: Size on Neon (Free plan limit 1 GB)
-        if: steps.check.outputs.go == 'true'
-        run: |
-          psql "$TARGET" -X -v ON_ERROR_STOP=1 -c "
-            SELECT n.nspname || '.' || c.relname AS table, pg_size_pretty(pg_total_relation_size(c.oid)) AS size
-            FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-            WHERE n.nspname IN ('portal', 'site', 'neon_auth') AND c.relkind = 'r'
-            ORDER BY pg_total_relation_size(c.oid) DESC LIMIT 15"
-          mb=$(psql "$TARGET" -XAtc "SELECT pg_database_size(current_database()) / 1048576")
-          echo "Neon database: ${mb} MB of 1024 MB"
-          echo "### Neon database: ${mb} MB of the Free plan's 1024 MB" >> "$GITHUB_STEP_SUMMARY"
-          if [ "$mb" -gt 850 ]; then echo "::warning::Over 850 MB: trim before switching (docs/neon.md, Size)"; fi
+        run: scripts/copy_to_neon.sh ${{ inputs.replace && '--replace' || '' }}

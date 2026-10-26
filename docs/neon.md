@@ -82,9 +82,14 @@ losing the crawled bills:
    the string (the host has no `-pooler`). Or run `neon connection-string production` (direct by default).
 2. GitHub → Settings → Secrets and variables → Actions → **New repository secret**
    `NEON_DATABASE_URL` = that string.
-3. Actions → **Copy the database to Neon (one-off)** → Run workflow. It copies schema `portal`,
-   compares every table's row count with Supabase, locks the schema away from the website's role, and
-   prints Neon's size. It refuses to overwrite an existing copy unless "replace" is ticked.
+3. Copy the data, either way:
+   - Actions → **Copy the database to Neon (one-off)** → Run workflow, or
+   - from a laptop, with the Postgres 18 client (`brew install libpq && brew link --force libpq`):
+     `SOURCE='<Supabase session pooler URL>' TARGET='<Neon direct URL>' scripts/copy_to_neon.sh`
+
+   `scripts/copy_to_neon.sh` copies schema `portal`, compares every table's row count with Supabase,
+   locks the schema away from the website's role, and prints Neon's size. It refuses to overwrite an
+   existing copy unless given `--replace` ("replace" in the workflow).
 4. When it's green: edit secret `DATABASE_URL` and paste the same Neon string, then delete
    `NEON_DATABASE_URL`. The next crawl, site build and county load write to Neon.
 5. Keep the Supabase project for a week as a fallback, then delete it. Raw portal responses still
