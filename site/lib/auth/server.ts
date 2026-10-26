@@ -6,3 +6,9 @@ export const auth = createNeonAuth({
   baseUrl: process.env.NEON_AUTH_BASE_URL!,
   cookies: { secret: process.env.NEON_AUTH_COOKIE_SECRET! },
 });
+
+// Owner accounts are off unless OWNER_ACCOUNTS=on (see proxy.ts). Checked again inside every action and
+// route, because server actions can be called from any URL, not only the ones proxy.ts covers.
+export function ownerAccountsEnabled() {
+  return process.env.OWNER_ACCOUNTS === "on";
+}

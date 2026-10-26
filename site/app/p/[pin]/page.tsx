@@ -9,6 +9,12 @@ import type { Appeal, Meta, Property } from "@/lib/types";
 
 export const revalidate = 3600;
 
+// Pages are built on first visit and then served from Vercel's cache for an hour, so repeat visits
+// (and scrapers re-reading the same page) don't reach the database.
+export async function generateStaticParams() {
+  return [];
+}
+
 type Params = { params: Promise<{ pin: string }> };
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {

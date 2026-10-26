@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth/server";
+import { notFound, redirect } from "next/navigation";
+import { auth, ownerAccountsEnabled } from "@/lib/auth/server";
 import { displayName, files, ownerPrefix } from "@/lib/storage";
 import { signOut } from "../auth/actions";
 
@@ -8,6 +8,7 @@ export const metadata: Metadata = { title: "Your account" };
 export const dynamic = "force-dynamic";
 
 export default async function AccountPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  if (!ownerAccountsEnabled()) notFound();
   const { data: session } = await auth.getSession();
   if (!session?.user) redirect("/auth/sign-in");
   const { error } = await searchParams;

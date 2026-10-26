@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
+import { ownerAccountsEnabled } from "@/lib/auth/server";
 import { signIn, signUp } from "../actions";
 
 export const metadata: Metadata = { title: "Owner sign-in" };
 
 export default async function SignInPage({ searchParams }: { searchParams: Promise<{ mode?: string; error?: string }> }) {
+  if (!ownerAccountsEnabled()) notFound();
   const { mode, error } = await searchParams;
   const creating = mode === "sign-up";
   return (

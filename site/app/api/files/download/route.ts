@@ -1,9 +1,10 @@
 // Send the signed-in owner to a short-lived link for one of their own documents.
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth/server";
+import { auth, ownerAccountsEnabled } from "@/lib/auth/server";
 import { displayName, files, ownerPrefix } from "@/lib/storage";
 
 export async function GET(request: Request) {
+  if (!ownerAccountsEnabled()) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const { data: session } = await auth.getSession();
   if (!session?.user) return NextResponse.json({ error: "Sign in first" }, { status: 401 });
   const key = new URL(request.url).searchParams.get("key") ?? "";
