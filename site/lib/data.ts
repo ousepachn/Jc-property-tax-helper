@@ -1,15 +1,19 @@
-// Where the site's data comes from: the `site` schema in Postgres (production, read-only role),
+// Where the site's data comes from: the `site` schema in Neon Postgres (production, read-only role),
 // or a folder written by `python pipeline/build_site.py --json-out` (local development).
 // Imported only by server components and route handlers.
+//
+// Every query here is a single read, so it goes over Neon's HTTP endpoint (@neondatabase/serverless):
+// no connections to pool or leak in serverless functions, and it works wherever HTTPS does.
+import { neon } from "@neondatabase/serverless";
 import { promises as fs } from "fs";
 import path from "path";
-import postgres from "postgres";
 import type { MapPoint, Meta, Property, Score, SearchHit } from "./types";
 
 const DB_URL = process.env.SITE_DATABASE_URL;
-const DATA_DIR = path.resolve(process.cwd(), process.env.SITE_DATA_DIR || "data");
+// local development only: keep the bundler from tracing the whole project through this path
+const DATA_DIR = path.resolve(/*turbopackIgnore: true*/ process.cwd(), process.env.SITE_DATA_DIR || "data");
 
-const sql = DB_URL ? postgres(DB_URL, { prepare: false, max: 3, idle_timeout: 20, connect_timeout: 10 }) : null;
+const sql = DB_URL ? neon(DB_URL) : null;
 
 // --- local JSON files ----------------------------------------------------------------------------
 
@@ -47,11 +51,13 @@ export async function search(q: string, limit = 8): Promise<SearchHit[]> {
   const terms = normalizeQuery(q).split(" ").filter(Boolean);
   if (!terms.length) return [];
   if (sql) {
-    const where = terms.reduce((acc, t) => sql`${acc} AND upper(address) LIKE ${"%" + t + "%"}`, sql`TRUE`);
-    const rows = await sql<SearchHit[]>`
-      SELECT pin, address, unit, kind FROM site.properties WHERE ${where}
-      ORDER BY length(address), address, unit NULLS FIRST LIMIT ${limit}`;
-    return rows;
+    const where = terms.map((_, i) => `upper(address) LIKE $${i + 1}`).join(" AND ");
+    const rows = await sql.query(
+      `SELECT pin, address, unit, kind FROM site.properties WHERE ${where}
+       ORDER BY length(address), address, unit NULLS FIRST LIMIT $${terms.length + 1}`,
+      [...terms.map((t) => `%${t}%`), limit],
+    );
+    return rows as SearchHit[];
   }
   const idx = await localIndex();
   const hits: SearchHit[] = [];
@@ -68,8 +74,8 @@ export async function search(q: string, limit = 8): Promise<SearchHit[]> {
 export async function getProperty(pin: string): Promise<Property | null> {
   if (!/^\d{4}_[\w.]+$/.test(pin)) return null;
   if (sql) {
-    const rows = await sql<{ data: Property }[]>`SELECT data FROM site.properties WHERE pin = ${pin}`;
-    return rows[0]?.data ?? null;
+    const rows = await sql`SELECT data FROM site.properties WHERE pin = ${pin}`;
+    return (rows[0]?.data as Property) ?? null;
   }
   try {
     const shard = await readJson<Record<string, Property>>(`p/${shardOf(pin)}.json`);
@@ -81,8 +87,8 @@ export async function getProperty(pin: string): Promise<Property | null> {
 
 export async function getMeta(): Promise<Meta | null> {
   if (sql) {
-    const rows = await sql<{ value: Meta }[]>`SELECT value FROM site.meta WHERE key = '0906'`;
-    return rows[0]?.value ?? null;
+    const rows = await sql`SELECT value FROM site.meta WHERE key = '0906'`;
+    return (rows[0]?.value as Meta) ?? null;
   }
   try {
     return await readJson<Meta>("meta.json");
@@ -95,12 +101,13 @@ export type BBox = [number, number, number, number]; // south, west, north, east
 
 export async function mapPoints(bbox?: BBox): Promise<MapPoint[]> {
   if (sql) {
-    const area = bbox
-      ? sql`AND lat BETWEEN ${bbox[0]} AND ${bbox[2]} AND lon BETWEEN ${bbox[1]} AND ${bbox[3]}`
-      : sql``;
-    const rows = await sql<{ pin: string; lat: number; lon: number; change: number | null; appeal: Score | null }[]>`
-      SELECT pin, lat, lon, change, appeal FROM site.properties WHERE lat IS NOT NULL ${area}`;
-    return rows.map((r) => [r.pin, r.lat, r.lon, r.change, r.appeal]);
+    const area = bbox ? "AND lat BETWEEN $1 AND $3 AND lon BETWEEN $2 AND $4" : "";
+    const rows = await sql.query(
+      `SELECT pin, lat, lon, change, appeal FROM site.properties WHERE lat IS NOT NULL ${area}`,
+      bbox ?? [],
+      { arrayMode: true },
+    );
+    return rows as MapPoint[];
   }
   const idx = await localIndex();
   return idx.rows

@@ -1,5 +1,8 @@
 # Hosting: Supabase database + public repository
 
+> Moving to Neon: see [neon.md](neon.md) for the website's database, owner accounts and file
+> storage. The steps below still describe the Supabase setup the pipeline uses today.
+
 The crawler's data lives in a Supabase project. The GitHub repository holds only code, so it can be
 public, and public repositories get unlimited free GitHub Actions minutes.
 

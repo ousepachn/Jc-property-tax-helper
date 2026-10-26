@@ -92,6 +92,9 @@ def connect(target):
         if re.search(r":6543(/|$)", str(target)):
             raise SystemExit("DATABASE_URL uses Supabase's transaction pooler (port 6543); "
                              "use the Session pooler connection string (port 5432)")
+        if re.search(r"@[^/]*-pooler\.[^/]*neon\.tech", str(target)):
+            raise SystemExit("DATABASE_URL is Neon's pooled connection string; the pipeline sets a "
+                             "session search_path, so use the direct one (DATABASE_URL_UNPOOLED)")
 
         conn = psycopg.connect(str(target), autocommit=False, keepalives=1, keepalives_idle=30,
                                prepare_threshold=None)   # poolers do not keep prepared statements

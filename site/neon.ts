@@ -3,7 +3,7 @@ import { defineConfig } from "@neon/config/v1";
 export default defineConfig({
   // Declare your Neon services here
   auth: true,
-  aiGateway: true,
+  // aiGateway: true,  // not served on the Free plan; enable after upgrading (for a future chatbot)
   buckets: {
     // "private" is the default; use "public_read" for anonymous reads
     assets: { access: "private" },
