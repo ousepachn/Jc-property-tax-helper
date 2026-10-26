@@ -53,10 +53,58 @@ alter default privileges in schema site grant select on tables to site_reader;
 
 ## Vercel
 
-Project root `site`. Environment variables: `SITE_DATABASE_URL`, `NEON_AUTH_BASE_URL`,
-`NEON_AUTH_COOKIE_SECRET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`,
-`AWS_REGION`. Function region Washington, D.C. (`iad1`) is closest to `us-east-2`; Columbus
-(`cle1`) is closer still.
+1. vercel.com → **Add New → Project** → import `ousepachn/jc-property-tax-helper`. If the repository
+   isn't listed, **Adjust GitHub App Permissions** and give Vercel access to it.
+2. **Root Directory: `site`** (framework Next.js is detected). Leave the build settings as they are.
+3. **Environment Variables** → paste the contents of a `.env` file (the box accepts a whole file):
+   `SITE_DATABASE_URL`, `NEON_AUTH_BASE_URL`, `NEON_AUTH_COOKIE_SECRET` (a new one for production:
+   `openssl rand -base64 32`), `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`,
+   `AWS_REGION`. Values without the surrounding quotes.
+4. Deploy. Then Settings → Functions → region **Washington, D.C. (iad1)** or **Cleveland (cle1)**,
+   both near Neon's `us-east-2`, and redeploy.
+5. Neon Auth only accepts sign-ins from listed domains (localhost is allowed by default).
+   `https://jc-property-tax-helper.vercel.app` is listed; add any other domain the site is served
+   from, including a preview URL you want to test sign-in on: `neon neon-auth domain add https://...`
+   (run in `site/`). An "invalid domain" error means one is missing.
+
+Production deploys the repository's default branch. The Neon-wired site has to be merged there
+first; until then use the preview deployment of the working branch.
 
 Neon Auth sends verification and reset emails through Neon's shared sender, which is meant for
 development. Set up your own email provider in the Neon console before inviting owners.
+
+## Moving the pipeline from Supabase to Neon
+
+The scheduled jobs write wherever the GitHub secret `DATABASE_URL` points. To move them without
+losing the crawled bills:
+
+1. Neon console → project → **Connect** → branch `production`, turn **Connection pooling off**, copy
+   the string (the host has no `-pooler`). Or run `neon connection-string production` (direct by default).
+2. GitHub → Settings → Secrets and variables → Actions → **New repository secret**
+   `NEON_DATABASE_URL` = that string.
+3. Actions → **Copy the database to Neon (one-off)** → Run workflow. It copies schema `portal`,
+   compares every table's row count with Supabase, locks the schema away from the website's role, and
+   prints Neon's size. It refuses to overwrite an existing copy unless "replace" is ticked.
+4. When it's green: edit secret `DATABASE_URL` and paste the same Neon string, then delete
+   `NEON_DATABASE_URL`. The next crawl, site build and county load write to Neon.
+5. Keep the Supabase project for a week as a fallback, then delete it. Raw portal responses still
+   go to Supabase Storage (`SUPABASE_URL`, `SUPABASE_SECRET_KEY`) until they move to Neon Object
+   Storage (5 GB free).
+
+## Size
+
+The Free plan allows 1 GB of Postgres per project; past it, writes are blocked (nothing is deleted).
+
+| What | Size | Notes |
+|---|---|---|
+| `site` (Jersey City) | 108 MB | rebuilt daily; deleted rows are reused, so it can sit near 2× (about 220 MB) |
+| `neon_auth` | under 1 MB | grows with owner accounts |
+| `portal` | under 517 MB | Supabase's figure includes dead space from the slimmed bills table; the copy rewrites it compactly. The copy job prints the real number |
+| **Expected total** | **about 650–750 MB** | 250+ MB of headroom; bills grow roughly a few % per year |
+
+If it gets close (the copy job warns over 850 MB), trim in this order:
+
+1. Owner history: keep only the latest year in `parcel_owners` (up to ~60 MB).
+2. `site` for Hoboken and Union City, when they're added: about 30 MB each; still fits.
+3. Old bills: drop `bills` rows older than the four years the site shows.
+4. Or upgrade to Launch: $0.35 per GB-month beyond the free amount, no minimum.
