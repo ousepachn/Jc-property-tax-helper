@@ -56,8 +56,8 @@ def export_zip(rows):
 
 
 SAMPLE = [
-    row("5803", "38", "", "2", "3700", 950000),
-    row("39.01", "9", "C0602", "2", "900", 330800),
+    row("9901", "1", "", "2", "3700", 950000),
+    row("88.02", "7", "C0310", "2", "900", 330800),
     row("5003", "1", "C0001", "1", "833", 43900, rec="M"),          # abated condo: taxable part ...
     row("5003", "1", "C0001", "15F", "833", 378100, rec="X"),       # ... and its exempt part
     row("101", "1.01", "HM", "4B", "0", 1000, sale=("2049-11-01", "1", "3")),
@@ -74,21 +74,21 @@ def test_parse_and_load_sqlite(tmp_path):
     db, (n_p, n_a, n_o) = load_sample(tmp_path / "t.sqlite")
     assert (n_p, n_a, n_o) == (5, 20, 20)
     c = sqlite3.connect(tmp_path / "t.sqlite")
-    p = dict(zip([d[0] for d in c.execute("SELECT * FROM parcels WHERE pin='0906_5803_38'").description],
-                 c.execute("SELECT * FROM parcels WHERE pin='0906_5803_38'").fetchone()))
+    p = dict(zip([d[0] for d in c.execute("SELECT * FROM parcels WHERE pin='0906_9901_1'").description],
+                 c.execute("SELECT * FROM parcels WHERE pin='0906_9901_1'").fetchone()))
     assert p["sq_ft"] == 3700 and p["year_built"] == 1900 and p["building_desc"] == "2S-F-D-2U"
     assert p["sale_price"] == 500000 and p["nu_code"] == "0" and p["record_type"] == "M"
     assert p["latitude"] is None                                  # 0 means no position
     assert c.execute("SELECT record_type, property_class FROM parcels WHERE pin='0906_5003_1_C0001' "
                      "ORDER BY record_type").fetchall() == [("M", "1"), ("X", "15F")]
-    assert c.execute("SELECT pin FROM parcels WHERE block='39.01'").fetchone()[0] == "0906_39.01_9_C0602"
-    assert c.execute("SELECT year, total FROM parcel_assessments WHERE pin='0906_5803_38' ORDER BY year").fetchall() \
+    assert c.execute("SELECT pin FROM parcels WHERE block='88.02'").fetchone()[0] == "0906_88.02_7_C0310"
+    assert c.execute("SELECT year, total FROM parcel_assessments WHERE pin='0906_9901_1' ORDER BY year").fetchall() \
         == [(2023, 855000.0), (2024, 855000.0), (2025, 950000.0), (2026, 950000.0)]
     # private fields live only in parcel_owners, and the current year carries mailing + mortgage
     assert "owner_name" not in [d[0] for d in c.execute("SELECT * FROM parcels").description]
-    assert c.execute("SELECT owner_name, mortgage_account FROM parcel_owners WHERE pin='0906_5803_38' AND year=2026"
+    assert c.execute("SELECT owner_name, mortgage_account FROM parcel_owners WHERE pin='0906_9901_1' AND year=2026"
                      ).fetchone() == ("SAMPLE, OWNER", "MTG1")
-    assert c.execute("SELECT owner_name, mortgage_account FROM parcel_owners WHERE pin='0906_5803_38' AND year=2023"
+    assert c.execute("SELECT owner_name, mortgage_account FROM parcel_owners WHERE pin='0906_9901_1' AND year=2023"
                      ).fetchone() == ("PRIOR, OWNER", None)
 
 

@@ -196,9 +196,9 @@ def test_supabase_raw_store_round_trip():
     assert s.headers == {"apikey": "sb_secret_abc"}                   # new keys never go in Authorization
     rs.ensure_bucket()
     assert s.calls[-1][2] == {"id": store.RAW_BUCKET, "name": store.RAW_BUCKET, "public": False}
-    key = "   39  01    9       C0602   "                               # WIPP keys are space-padded
+    key = "   88  02    7       C0310   "                               # WIPP keys are space-padded
     rs.put("0910", key, "2026-01-01", '{"a": 1}')
-    path = f"{store.RAW_BUCKET}/0910/39__01____9_______C0602.json.z"
+    path = f"{store.RAW_BUCKET}/0910/88__02____7_______C0310.json.z"
     assert zlib.decompress(s.objects[path]) == b'{"a": 1}'
     assert rs.get("0910", key) == '{"a": 1}'
     rs.delete("0910", key)

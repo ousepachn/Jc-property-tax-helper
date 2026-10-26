@@ -69,9 +69,8 @@ public with it.
 2. **Delete the Actions caches** (Actions → Caches → delete every `portal-*` entry).
 3. **Delete old workflow runs** of *Extract tax bills*. Their artifacts have expired, but their logs
    and summaries would become public. Deleting the runs is the simple way to be sure.
-4. **Decide on git history.** No owner names were ever committed. Older commits of
-   `tests/fixtures/hls_jc_313_new_york.json` contain that property's payment methods (card / ACH) and
-   the 2025 lien holder's name. The current version has these removed. To remove them from history too,
+4. **Decide on git history.** No owner names were ever committed, but older commits contain a real
+   account's bill history as a test fixture (since replaced by a made-up account). To remove it from history too,
    either rewrite history (e.g. `git filter-repo`) and force-push every branch, or publish a fresh
    repository from the current code with a single initial commit.
 5. Settings → General → Danger zone → **Change visibility → Public**.

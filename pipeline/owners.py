@@ -62,7 +62,7 @@ def norm_name(name, keep_care_of=False):
 
 
 def parse_street(addr):
-    """'413-15 9TH ST #602' -> ({413, 414, 415}, '9TH ST'). Returns (set(), '') if no house number."""
+    """'121-23 MAIN ST #310' -> ({121, 122, 123}, 'MAIN ST'). Returns (set(), '') if no house number."""
     s = re.sub(r"[.,]", " ", (addr or "").upper())
     s = UNIT.sub("", re.sub(r"\s+", " ", s).strip())
     m = re.match(r"^(\d+)(?:\s*-\s*(\d+))?[A-Z]?\s+(.*)$", s)
@@ -72,7 +72,7 @@ def parse_street(addr):
     numbers = {lo}
     if hi_raw:
         hi = int(hi_raw)
-        if hi < lo:  # '413-15' means 413..415
+        if hi < lo:  # '121-23' means 121..123
             hi = int(str(lo)[: len(str(lo)) - len(hi_raw)] + hi_raw)
         if 0 <= hi - lo <= 20:
             numbers = set(range(lo, hi + 1))
