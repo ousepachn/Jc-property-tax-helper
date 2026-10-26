@@ -289,3 +289,24 @@ def test_import_resumes_raw_copy(pg, monkeypatch, tmp_path):
     assert raw.puts == 1 and set(raw.objects) == {("0910", "1"), ("0910", "3")}
     marked = dict(conn.execute("SELECT account_id, raw_fetched_at IS NOT NULL FROM accounts").fetchall())
     assert marked == {"1": True, "2": False, "3": True}             # 2 is Daniel's Law: never stored
+
+
+@needs_pg
+def test_startup_does_not_lock_out_a_running_crawl(pg):
+    """A job starting while another is mid-write must not take table locks (it deadlocked in CI)."""
+    import psycopg
+    extract_bills.connect(PG).close()                                   # schema exists
+    writer = psycopg.connect(PG)                                        # a crawl with an open transaction
+    writer.execute(f"SET search_path TO {store.PG_SCHEMA}")
+    writer.execute("INSERT INTO bills (county_district, account_id, tax_year) VALUES ('0906', '1', 2026)")
+    try:
+        with psycopg.connect(PG, autocommit=True) as c:
+            c.execute("ALTER ROLE CURRENT_USER SET lock_timeout = '2s'")
+        try:
+            extract_bills.connect(PG).close()                           # the second job starting up
+        finally:
+            with psycopg.connect(PG, autocommit=True) as c:
+                c.execute("ALTER ROLE CURRENT_USER RESET lock_timeout")
+    finally:
+        writer.rollback()
+        writer.close()

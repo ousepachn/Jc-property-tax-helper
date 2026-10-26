@@ -61,8 +61,15 @@ class Db:
             return
         script = re.sub(r"--[^\n]*", "", script)   # comments may contain semicolons
         for stmt in (s.strip() for s in script.split(";")):
-            if stmt:
-                self.execute(stmt)
+            if not stmt:
+                continue
+            # CREATE INDEX IF NOT EXISTS locks the table (SHARE, held to commit) before it checks the
+            # name, so it blocks writers even when the index exists. Two crawl jobs starting at once
+            # then deadlock against each other's writes; skip indexes that are already there.
+            m = re.match(r"CREATE\s+(?:UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\s+(\w+)", stmt, re.I)
+            if m and self.execute("SELECT to_regclass(?)", (m.group(1),)).fetchone()[0] is not None:
+                continue
+            self.execute(stmt)
 
     def columns(self, table):
         if self.dialect == "sqlite":
