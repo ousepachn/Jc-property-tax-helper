@@ -126,32 +126,34 @@ async function searchAddresses(p: ParsedQuery): Promise<SearchHit[]> {
     const starts = params.length;
     params.push(SEARCH_LIMIT);
     const rows = await sql.query(
-      `SELECT address, count(*)::int AS n, min(pin) AS pin, min(unit) AS unit, min(kind) AS kind
+      `SELECT address, count(*)::int AS n, count(unit)::int AS u, min(pin) AS pin, min(unit) AS unit, min(kind) AS kind
        FROM site.properties WHERE ${where} GROUP BY address
        ORDER BY bool_or(upper(address) LIKE $${starts}) DESC, length(address), address LIMIT $${params.length}`,
       params,
     );
-    return (rows as { address: string; n: number; pin: string; unit: string | null; kind: string | null }[]).map((r) =>
-      r.n > 1 ? { pin: "", address: r.address, unit: null, kind: r.kind, units: r.n } : { pin: r.pin, address: r.address, unit: r.unit, kind: r.kind },
+    return (rows as { address: string; n: number; u: number; pin: string; unit: string | null; kind: string | null }[]).map((r) =>
+      r.n > 1 ? { pin: "", address: r.address, unit: null, kind: r.kind, units: r.u || r.n } : { pin: r.pin, address: r.address, unit: r.unit, kind: r.kind },
     );
   }
   const idx = await localIndex();
-  const by = new Map<string, SearchHit & { n: number }>();
+  const by = new Map<string, SearchHit & { n: number; u: number }>();
   for (const r of idx.rows) {
     const address = String(r[1]);
     if (!matches(address, p.terms)) continue;
     const g = by.get(address);
-    if (g) g.n++;
-    else by.set(address, { pin: String(r[0]), address, unit: (r[2] as string) ?? null, kind: (r[3] as string) ?? null, n: 1 });
+    const hasUnit = r[2] ? 1 : 0;
+    if (g) { g.n++; g.u += hasUnit; }
+    else by.set(address, { pin: String(r[0]), address, unit: (r[2] as string) ?? null, kind: (r[3] as string) ?? null, n: 1, u: hasUnit });
   }
   return [...by.values()]
     .sort((a, b) => Number(startsWithNumber(b.address, p.terms)) - Number(startsWithNumber(a.address, p.terms)) ||
       a.address.length - b.address.length || a.address.localeCompare(b.address))
     .slice(0, SEARCH_LIMIT)
-    .map(({ n, ...h }) => (n > 1 ? { ...h, pin: "", unit: null, units: n } : h));
+    .map(({ n, u, ...h }) => (n > 1 ? { ...h, pin: "", unit: null, units: u || n } : h));
 }
 
-// Units at the matching address(es), by unit number; "" lists a building's units in order.
+// Units at the matching address(es), by unit number; "" lists a building's units in order. The building's
+// own lot (the common elements, no unit number) is left out.
 async function searchUnits(p: ParsedQuery): Promise<SearchHit[]> {
   const u = p.unit ?? "";
   if (sql) {
@@ -166,7 +168,7 @@ async function searchUnits(p: ParsedQuery): Promise<SearchHit[]> {
     params.push(SEARCH_LIMIT);
     const rows = await sql.query(
       `SELECT pin, address, unit, kind FROM site.properties
-       WHERE ${where} AND ${UNIT_SQL} LIKE $${like}
+       WHERE ${where} AND unit IS NOT NULL AND ${UNIT_SQL} LIKE $${like}
        ORDER BY (upper(address) LIKE $${starts}) DESC, length(address), address, (${UNIT_SQL} = $${exact}) DESC,
                 length(${UNIT_SQL}), ${UNIT_SQL}
        LIMIT $${params.length}`,
@@ -178,7 +180,7 @@ async function searchUnits(p: ParsedQuery): Promise<SearchHit[]> {
   const hits: SearchHit[] = [];
   for (const r of idx.rows) {
     const unit = (r[2] as string) ?? null;
-    if (matches(String(r[1]), p.terms) && unitKey(unit ?? "").startsWith(u)) {
+    if (unit && matches(String(r[1]), p.terms) && unitKey(unit).startsWith(u)) {
       hits.push({ pin: String(r[0]), address: String(r[1]), unit, kind: (r[3] as string) ?? null });
     }
   }
@@ -223,15 +225,16 @@ export async function mapPoints(bbox?: BBox): Promise<MapPoint[]> {
     const query = (cols: string) =>
       sql.query(`SELECT pin, lat, lon, ${cols} FROM site.properties WHERE lat IS NOT NULL ${area}`, bbox ?? [], { arrayMode: true });
     // change_q4 / change_5y arrive with the next data build; until then show the long-run change
-    const rows = await query("change_q4, change_5y").catch(() => query("NULL, change"));
+    const rows = await query("change_q4, change_5y, coalesce(abatement, 0)").catch(() => query("NULL, change, 0"));
     return rows as MapPoint[];
   }
   const idx = await localIndex();
   const col = (name: string) => idx.fields.indexOf(name);
-  const q4 = col("change_q4"), y5 = col("change_5y"), lat = col("lat"), lon = col("lon");
+  const q4 = col("change_q4"), y5 = col("change_5y"), ab = col("abatement"), lat = col("lat"), lon = col("lon");
   return idx.rows
     .filter((r) => r[lat] != null)
     .map((r): MapPoint => [String(r[0]), Number(r[lat]), Number(r[lon]),
-      q4 >= 0 ? ((r[q4] as number) ?? null) : null, y5 >= 0 ? ((r[y5] as number) ?? null) : ((r[col("change")] as number) ?? null)])
+      q4 >= 0 ? ((r[q4] as number) ?? null) : null, y5 >= 0 ? ((r[y5] as number) ?? null) : ((r[col("change")] as number) ?? null),
+      ab >= 0 ? Number(r[ab] ?? 0) : 0])
     .filter((p) => !bbox || (p[1] >= bbox[0] && p[1] <= bbox[2] && p[2] >= bbox[1] && p[2] <= bbox[3]));
 }

@@ -68,6 +68,8 @@ export interface Property {
   change_5y?: number | null;
   q4_bill?: Record<string, number | null>;
   permits?: Permits;
+  abatement?: Abatement | null;
+  building_compare?: BuildingCompare | null;
   compare: {
     count: number;
     size_band?: number | null;
@@ -81,6 +83,45 @@ export interface Property {
   };
   appeals_nearby?: { since: number; compared: number; won: number; median_reduction: number | null };
   appeal: Appeal;
+}
+
+export type AbatementLaw = "long_term" | "five_year" | "affordable" | "urban_renewal" | "other";
+
+export type Abatement =
+  | { status: "active"; law: AbatementLaw; statute: string | null; since: string | null; until: string | null;
+      full: boolean; exempt_value: number | null }
+  | { status: "ended"; year: number };
+
+export interface BuildingUnit { pin: string; unit: string; floor: number | null; sq_ft: number; value: number; ppsf: number }
+
+// this condo unit against the other units in its building: full assessment (taxable + abated) per sq ft
+export interface BuildingCompare {
+  units: number;
+  compared: number;
+  abated_units: number;
+  median_ppsf: number;
+  ppsf: number;
+  value: number;
+  floor: number | null;
+  vs_median: number;
+  vs_floor: number | null; // vs the building's trend by floor, when it has enough floors
+  above: boolean;
+  higher_than: number; // % of compared units assessed lower per sq ft
+  list: BuildingUnit[];
+}
+
+export interface CityStats {
+  taxable_value: number;
+  levy_estimate: number;
+  rate: number;
+  records: number;
+  exempt_value: number;
+  by_class: { label: string; value: number; share: number | null }[];
+  abatement: {
+    properties: number; units: number; buildings: number; full: number; value: number;
+    share_of_value: number | null; regular_tax_equivalent: number; by_law: Record<string, number>;
+    ending_by: number; ending_soon: number; ended_recently: number; ended_since: number;
+  };
 }
 
 export type PermitRelevance = "likely" | "possible" | "unlikely" | "lower";
@@ -124,6 +165,7 @@ export interface Meta {
   rate?: Record<string, number>; // general tax rate per $100 of assessed value
   median_change_q4?: number | null;
   median_change_5y?: number | null;
+  city?: CityStats;
 }
 
 export interface SearchHit {
@@ -134,5 +176,6 @@ export interface SearchHit {
   units?: number; // a building: how many properties share this address
 }
 
-// map points: [pin, lat, lon, Q4 bill change vs a year earlier, change over 5 years]
-export type MapPoint = [string, number, number, number | null, number | null];
+// map points: [pin, lat, lon, Q4 bill change vs a year earlier, change over 5 years,
+//              abatement: 0 none, 1 long-term, 2 five-year, 3 other, 4 ended recently]
+export type MapPoint = [string, number, number, number | null, number | null, number];

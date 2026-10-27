@@ -21,6 +21,12 @@ function bin(change: number | null, bins: number[]) {
 
 const pctLabel = (v: number) => `${v >= 0 ? "+" : ""}${Math.round(v * 100)}%`;
 
+// "Abatements only": every other property fades to a faint outline of the city, and abated ones are
+// colored by the law they're under (point column 5: 1 long-term, 2 five-year, 3 other, 4 ended recently).
+export const ABATEMENT_KINDS = ["Long-term", "5-year", "Other", "Ended recently"];
+const ABATE_LIGHT = ["#6d4bb3", "#1b8a7a", "#c08a12", "#b5473a"];
+const ABATE_DARK = ["#a88bf0", "#4fd1bd", "#f0c04a", "#f07c6c"];
+
 interface View { cx: number; cy: number; scale: number } // cx, cy in mercator units; scale = px per unit
 
 const mercX = (lon: number) => (lon + 180) / 360;
@@ -29,7 +35,7 @@ const mercY = (lat: number) => {
   return 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI);
 };
 
-export default function MapView({ metric, label }: { metric: Metric; label: string }) {
+export default function MapView({ metric, label, abated = false }: { metric: Metric; label: string; abated?: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -66,7 +72,7 @@ export default function MapView({ metric, label }: { metric: Metric; label: stri
 
   useEffect(() => {
     draw();
-  }, [isDark, metric]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isDark, metric, abated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const draw = useCallback(() => {
     const c = canvas.current;
@@ -82,23 +88,27 @@ export default function MapView({ metric, label }: { metric: Metric; label: stri
     ctx.clearRect(0, 0, w, h);
     const { cx, cy, scale } = view.current;
     // about 1.5 px at city view, growing as you zoom in
-    const r = Math.max(1.1, Math.min(5, scale / 2e6));
-    const colors = dark.current ? COLORS_DARK : COLORS_LIGHT;
+    const r0 = Math.max(1.1, Math.min(5, scale / 2e6));
+    const colors = abated ? (dark.current ? ABATE_DARK : ABATE_LIGHT) : dark.current ? COLORS_DARK : COLORS_LIGHT;
     const a = xy.current, col = METRIC_COL[metric], bins = BINS[metric];
-    // draw grey (no data) first, then each bin, so colors stay on top
+    const classOf = (p: MapPoint) => (abated ? p[5] - 1 : bin(p[col], bins));
+    // draw grey (no data, or not abated) first, then each class, so colors stay on top
     for (let b = -1; b < colors.length; b++) {
       ctx.fillStyle = b < 0 ? (dark.current ? "#334047" : "#dfe5e9") : colors[b];
+      ctx.globalAlpha = b < 0 && abated ? 0.45 : 1;
       ctx.beginPath();
       for (let i = 0; i < points.length; i++) {
-        if (bin(points[i][col], bins) !== b) continue;
+        if (classOf(points[i]) !== b) continue;
         const x = (a[2 * i] - cx) * scale + w / 2, y = (a[2 * i + 1] - cy) * scale + h / 2;
         if (x < -5 || y < -5 || x > w + 5 || y > h + 5) continue;
+        const r = b >= 0 && abated ? Math.max(r0 * 1.6, 2.6) : r0;   // abated dots stand out at city scale
         ctx.moveTo(x + r, y);
         ctx.arc(x, y, r, 0, Math.PI * 2);
       }
       ctx.fill();
     }
-  }, [points, metric]);
+    ctx.globalAlpha = 1;
+  }, [points, metric, abated]);
 
   const fit = useCallback(() => {
     const c = canvas.current;
@@ -139,6 +149,7 @@ export default function MapView({ metric, label }: { metric: Metric; label: stri
     const w = c.clientWidth, h = c.clientHeight, a = xy.current;
     let best = -1, bd = 64; // within 8 px
     for (let i = 0; i < a.length / 2; i++) {
+      if (abated && points && !points[i][5]) continue;
       const dx = (a[2 * i] - cx) * scale + w / 2 - mx, dy = (a[2 * i + 1] - cy) * scale + h / 2 - my;
       const d = dx * dx + dy * dy;
       if (d < bd) { bd = d; best = i; }
@@ -173,7 +184,8 @@ export default function MapView({ metric, label }: { metric: Metric; label: stri
     if (i < 0) return setTip(null);
     const ch = points[i][METRIC_COL[metric]];
     setTip({ x: e.clientX - rect.left, y: e.clientY - rect.top,
-      text: ch == null ? "No data for this view" : `${pctLabel(ch)} · ${label}` });
+      text: abated ? (points[i][5] === 4 ? "Abatement ended recently" : `${ABATEMENT_KINDS[points[i][5] - 1]} abatement`)
+        : ch == null ? "No data for this view" : `${pctLabel(ch)} · ${label}` });
   };
   const onUp = (e: React.PointerEvent) => {
     const d = drag.current;
@@ -196,7 +208,7 @@ export default function MapView({ metric, label }: { metric: Metric; label: stri
     return () => c.removeEventListener("wheel", onWheel);
   });
 
-  const colors = isDark ? COLORS_DARK : COLORS_LIGHT;
+  const colors = abated ? (isDark ? ABATE_DARK : ABATE_LIGHT) : isDark ? COLORS_DARK : COLORS_LIGHT;
   return (
     <div className="mapbox" ref={box}>
       <canvas
@@ -209,7 +221,7 @@ export default function MapView({ metric, label }: { metric: Metric; label: stri
         onPointerLeave={() => setTip(null)}
       />
       {!points && <div className="mapstatus">{error ? "The map could not load. Search by address above." : "Loading map…"}</div>}
-      {points && !points.some((p) => p[METRIC_COL[metric]] != null) && (
+      {points && !abated && !points.some((p) => p[METRIC_COL[metric]] != null) && (
         <div className="mapstatus" style={{ pointerEvents: "none" }}>This view needs bill history that isn&apos;t loaded yet.</div>
       )}
       {tip && <div className="maptip" style={{ left: tip.x, top: tip.y }}>{tip.text}</div>}
@@ -218,6 +230,14 @@ export default function MapView({ metric, label }: { metric: Metric; label: stri
         <button type="button" aria-label="Zoom out" onClick={() => zoomAt(1 / 1.6)}>−</button>
         <button type="button" aria-label="Show all of Jersey City" onClick={fit} style={{ fontSize: 13 }}>⤢</button>
       </div>
+      {abated ? (
+        <div className="maplegend">
+          <span>Tax abatements</span>
+          {ABATEMENT_KINDS.map((k, i) => (
+            <span key={k} className="lg"><i style={{ background: colors[i] }} />{k}</span>
+          ))}
+        </div>
+      ) : (
       <div className="maplegend">
         <span>{label}</span>
         <div className="ramp">{colors.map((c) => <span key={c} style={{ background: c }} />)}</div>
@@ -227,6 +247,7 @@ export default function MapView({ metric, label }: { metric: Metric; label: stri
           <span>{pctLabel(BINS[metric][4])}+</span>
         </div>
       </div>
+      )}
     </div>
   );
 }

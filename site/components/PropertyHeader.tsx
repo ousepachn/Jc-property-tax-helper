@@ -1,5 +1,6 @@
 // Title block shared by a property's two steps: the overview and the appeal check.
 import Link from "next/link";
+import { abatementChip } from "./Abatement";
 import { addressLine, kindLabel, money, sqft } from "@/lib/format";
 import type { Property } from "@/lib/types";
 
@@ -18,6 +19,7 @@ export default function PropertyHeader({ p, step }: { p: Property; step: 1 | 2 }
         {p.sq_ft ? <span><b>{sqft(p.sq_ft)}</b></span> : null}
         {p.year_built ? <span>Built <b>{p.year_built}</b></span> : null}
         {Number.isFinite(latestYear) && <span>{latestYear} assessment <b>{money(p.assessment[latestYear])}</b></span>}
+        {abatementChip(p) && <span className="chip possible">{abatementChip(p)}</span>}
         <span className="small">Block/lot {p.pin.split("_").slice(1).join(" / ")}</span>
       </div>
     </div>

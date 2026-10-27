@@ -70,3 +70,22 @@ export const RELEVANCE: Record<string, string> = {
 
 export const isoDate = (iso: string | null | undefined) =>
   iso ? new Date(iso + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
+
+export const LAW: Record<string, { short: string; long: string }> = {
+  long_term: { short: "Long-term", long: "a long-term tax abatement (N.J.S.A. 40A:20, up to 30 years)" },
+  five_year: { short: "5-year", long: "a five-year tax abatement (N.J.S.A. 40A:21)" },
+  affordable: { short: "Affordable housing", long: "an affordable-housing tax exemption" },
+  urban_renewal: { short: "Urban renewal", long: "an urban-renewal tax abatement (older law)" },
+  other: { short: "Other", long: "a partial tax exemption" },
+};
+
+export const monthYear = (iso: string | null | undefined) =>
+  iso ? new Date(iso + "T12:00:00").toLocaleDateString("en-US", { month: "short", year: "numeric" }) : null;
+
+// $48.8B, $1.30B, $250M, $12,000
+export function bigMoney(v: number | null | undefined) {
+  if (v == null) return "—";
+  if (v >= 1e9) return `$${(v / 1e9).toFixed(v >= 1e10 ? 1 : 2)}B`;
+  if (v >= 1e6) return `$${Math.round(v / 1e6)}M`;
+  return money(v);
+}
