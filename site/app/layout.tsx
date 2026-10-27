@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Public_Sans } from "next/font/google";
 import Link from "next/link";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
 const publicSans = Public_Sans({ subsets: ["latin"], variable: "--font-public-sans", display: "swap" });
@@ -45,6 +47,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </p>
           </div>
         </footer>
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
