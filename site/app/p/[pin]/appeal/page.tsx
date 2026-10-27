@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import AbatementNote from "@/components/Abatement";
 import { PermitHistory } from "@/components/Permits";
+import PropertyFeedback from "@/components/PropertyFeedback";
 import PropertyHeader from "@/components/PropertyHeader";
 import { getMeta, getProperty } from "@/lib/data";
 import { addressLine, money, ratioPct, SCORE, shortDate } from "@/lib/format";
@@ -36,6 +37,7 @@ export default async function AppealStep({ params }: Params) {
       <p className="muted">
         Ready to file? <Link href="/appeal">The appeal guide</Link> has the {meta.ratio_year} deadlines, forms and fees.
       </p>
+      <PropertyFeedback pin={p.pin} />
     </>
   );
 }

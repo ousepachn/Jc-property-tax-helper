@@ -25,6 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </Link>
             <nav className="nav" aria-label="Main">
               <Link href="/appeal">Appeal guide</Link>
+              <Link href="/feedback">Feedback</Link>
               {process.env.OWNER_ACCOUNTS === "on" && <Link href="/account">Owner sign-in</Link>}
             </nav>
           </div>
@@ -38,6 +39,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </p>
             <p>
               An independent tool, not a government site. Not legal or tax advice; confirm figures with the Tax Assessor.
+            </p>
+            <p>
+              Something wrong or missing? <Link href="/feedback">Send feedback</Link>.
             </p>
           </div>
         </footer>
