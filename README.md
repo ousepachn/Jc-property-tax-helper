@@ -110,11 +110,26 @@ the last sale with its SR-1A nonusable code, and four years of assessments, whic
 lacks. Owner names and mailing addresses go to the private `parcel_owners` table only. Runs monthly via
 `.github/workflows/county-records.yml`.
 
+### Construction permits
+
+`pipeline/fetch_permits.py` loads Jersey City's permits from the city's permit portal (Tyler EnerGov,
+jcnj.org/permitportal, in use since June 2023 with older permits migrated in) into `permits`. The portal's
+public search returns at most 10,000 results per query and ignores its date filters, so `recent` reads the
+newest permits daily and `backfill` searches each street address once (that covers every condo unit in a
+building), keeping the permits on that address's tax lots; it is resumable and re-reads addresses after 120
+days. Each permit gets a `category` (new construction, addition, renovation, demolition, certificate, minor,
+trade sub-permit, utility). Runs daily via `.github/workflows/permits.yml`; the first full pass takes several
+runs. The state's DCA construction permit dataset (data.nj.gov `w9se-dmra`) has Jersey City only through 2023,
+which is why the city portal is used.
+
 ## Public website (`site/`)
 
-Next.js app for Vercel: map of every Jersey City parcel colored by tax change, address search, a page
-per property (tax over time vs similar nearby properties and the city, the appeal check with the
-comparable sales it used, appeals won nearby) and a plain-language appeal guide. It reads the
+Next.js app for Vercel. Two things on the home page: address search and a map of every Jersey City parcel,
+colored by the Q4 bill's change from a year earlier (default) or by the 5-year change. Each property has two
+steps: an overview (latest bill, tax over time vs similar nearby properties and the city) and an appeal step
+(the appeal check with the comparable sales it used, plus the property's permits and what finished work could
+add as an added assessment). Search understands condo units ("77 Hudson St 1205", "Unit 12", "#12"): a
+building shows once and lists its units. There is also a plain-language appeal guide. It reads the
 public-fields-only `site` schema, rebuilt daily by `pipeline/build_site.py`
 (`.github/workflows/build-site.yml`). Similar properties: same type, floor area within ±10% (at most
 ±15%), same era, nearby; see `pipeline/comparables.py`. Setup: [docs/hosting.md](docs/hosting.md#5-publish-the-website-vercel).

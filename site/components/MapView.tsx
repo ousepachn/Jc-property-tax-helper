@@ -4,17 +4,22 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MapPoint } from "@/lib/types";
 
-// Tax change since the base year, binned: below city-typical, typical, above.
-const BINS = [0.0, 0.1, 0.2, 0.3, 0.45];
-const COLORS_LIGHT = ["#2b6f9e", "#6ea6c9", "#c9d3d9", "#e9a35c", "#d4622b", "#a3301b"];
+// Two views: the newest bill (Q4 of the last year vs a year earlier) and the longer trend. Each is
+// binned around what most of the city saw, so the warm colors are the biggest increases.
+export type Metric = "q4" | "5y";
+export const METRIC_COL: Record<Metric, 3 | 4> = { q4: 3, "5y": 4 };
+const BINS: Record<Metric, number[]> = { q4: [0.05, 0.15, 0.25, 0.35, 0.5], "5y": [0.2, 0.45, 0.7, 0.95, 1.3] };
+const COLORS_LIGHT = ["#2b6f9e", "#6ea6c9", "#c9d0d3", "#e9a35c", "#d4622b", "#a3301b"];
 const COLORS_DARK = ["#5aa4d6", "#3d6f8f", "#4a5961", "#b27839", "#d5703c", "#e9553b"];
 
-function bin(change: number | null) {
+function bin(change: number | null, bins: number[]) {
   if (change == null) return -1;
   let i = 0;
-  while (i < BINS.length && change >= BINS[i]) i++;
+  while (i < bins.length && change >= bins[i]) i++;
   return i;
 }
+
+const pctLabel = (v: number) => `${v >= 0 ? "+" : ""}${Math.round(v * 100)}%`;
 
 interface View { cx: number; cy: number; scale: number } // cx, cy in mercator units; scale = px per unit
 
@@ -24,7 +29,7 @@ const mercY = (lat: number) => {
   return 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI);
 };
 
-export default function MapView({ baseYear, lastYear }: { baseYear: number; lastYear: number }) {
+export default function MapView({ metric, label }: { metric: Metric; label: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -61,7 +66,7 @@ export default function MapView({ baseYear, lastYear }: { baseYear: number; last
 
   useEffect(() => {
     draw();
-  }, [isDark]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isDark, metric]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const draw = useCallback(() => {
     const c = canvas.current;
@@ -79,13 +84,13 @@ export default function MapView({ baseYear, lastYear }: { baseYear: number; last
     // about 1.5 px at city view, growing as you zoom in
     const r = Math.max(1.1, Math.min(5, scale / 2e6));
     const colors = dark.current ? COLORS_DARK : COLORS_LIGHT;
-    const a = xy.current;
+    const a = xy.current, col = METRIC_COL[metric], bins = BINS[metric];
     // draw grey (no data) first, then each bin, so colors stay on top
     for (let b = -1; b < colors.length; b++) {
       ctx.fillStyle = b < 0 ? (dark.current ? "#334047" : "#dfe5e9") : colors[b];
       ctx.beginPath();
       for (let i = 0; i < points.length; i++) {
-        if (bin(points[i][3]) !== b) continue;
+        if (bin(points[i][col], bins) !== b) continue;
         const x = (a[2 * i] - cx) * scale + w / 2, y = (a[2 * i + 1] - cy) * scale + h / 2;
         if (x < -5 || y < -5 || x > w + 5 || y > h + 5) continue;
         ctx.moveTo(x + r, y);
@@ -93,7 +98,7 @@ export default function MapView({ baseYear, lastYear }: { baseYear: number; last
       }
       ctx.fill();
     }
-  }, [points]);
+  }, [points, metric]);
 
   const fit = useCallback(() => {
     const c = canvas.current;
@@ -166,9 +171,9 @@ export default function MapView({ baseYear, lastYear }: { baseYear: number; last
     if (e.pointerType !== "mouse" || !points) return;
     const i = nearest(e.clientX - rect.left, e.clientY - rect.top);
     if (i < 0) return setTip(null);
-    const ch = points[i][3];
+    const ch = points[i][METRIC_COL[metric]];
     setTip({ x: e.clientX - rect.left, y: e.clientY - rect.top,
-      text: ch == null ? "No tax history" : `Tax ${ch >= 0 ? "+" : ""}${Math.round(ch * 100)}% since ${baseYear}` });
+      text: ch == null ? "No data for this view" : `${pctLabel(ch)} · ${label}` });
   };
   const onUp = (e: React.PointerEvent) => {
     const d = drag.current;
@@ -197,13 +202,16 @@ export default function MapView({ baseYear, lastYear }: { baseYear: number; last
       <canvas
         ref={canvas}
         role="img"
-        aria-label={`Map of Jersey City properties colored by tax change from ${baseYear} to ${lastYear}. Select a dot to open a property.`}
+        aria-label={`Map of Jersey City properties colored by tax change, ${label}. Select a dot to open a property.`}
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
         onPointerLeave={() => setTip(null)}
       />
       {!points && <div className="mapstatus">{error ? "The map could not load. Search by address above." : "Loading map…"}</div>}
+      {points && !points.some((p) => p[METRIC_COL[metric]] != null) && (
+        <div className="mapstatus" style={{ pointerEvents: "none" }}>This view needs bill history that isn&apos;t loaded yet.</div>
+      )}
       {tip && <div className="maptip" style={{ left: tip.x, top: tip.y }}>{tip.text}</div>}
       <div className="mapctl">
         <button type="button" aria-label="Zoom in" onClick={() => zoomAt(1.6)}>+</button>
@@ -211,9 +219,13 @@ export default function MapView({ baseYear, lastYear }: { baseYear: number; last
         <button type="button" aria-label="Show all of Jersey City" onClick={fit} style={{ fontSize: 13 }}>⤢</button>
       </div>
       <div className="maplegend">
-        <span>Tax change, {baseYear}–{lastYear}</span>
+        <span>{label}</span>
         <div className="ramp">{colors.map((c) => <span key={c} style={{ background: c }} />)}</div>
-        <div className="ends"><span>&lt;0%</span><span>10%</span><span>20%</span><span>30%</span><span>45%+</span></div>
+        <div className="ends">
+          <span>&lt;{pctLabel(BINS[metric][0])}</span>
+          <span>{pctLabel(BINS[metric][2])}</span>
+          <span>{pctLabel(BINS[metric][4])}+</span>
+        </div>
       </div>
     </div>
   );
