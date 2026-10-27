@@ -429,8 +429,11 @@ def write_postgres(db, out, meta):
             db.execute(f"REVOKE ALL ON SCHEMA {SITE_SCHEMA} FROM {role}")
             db.execute(f"REVOKE ALL ON ALL TABLES IN SCHEMA {SITE_SCHEMA} FROM {role}")
     db.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+    # the extension may already live in another schema (Neon: public) that isn't on our search_path
+    trgm = db.execute("""SELECT n.nspname FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace
+                         WHERE e.extname = 'pg_trgm'""").fetchone()[0]
     db.execute(f"CREATE INDEX IF NOT EXISTS properties_address_trgm ON {SITE_SCHEMA}.properties "
-               "USING gin (address gin_trgm_ops)")
+               f'USING gin (address "{trgm}".gin_trgm_ops)')
     db.execute(f"DELETE FROM {SITE_SCHEMA}.properties WHERE town = ?", (meta["town"],))
     db.executemany(f"""INSERT INTO {SITE_SCHEMA}.properties
                        (pin, town, address, unit, kind, lat, lon, tax, change, appeal, change_q4, change_5y, abatement, data)
