@@ -34,4 +34,5 @@ jobs:
       - name: Download parcel map positions (public, about 3 minutes)
         run: python pipeline/fetch_njogis_parcels.py --county HUDSON --out data/raw/njogis | tail -1
       - name: Build site data
+        shell: bash   # -o pipefail: a failed build must fail the job, not hide behind tee
         run: python pipeline/build_site.py --parcels data/raw/njogis/parcels_hudson.csv | tee -a "$GITHUB_STEP_SUMMARY"
