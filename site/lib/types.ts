@@ -64,6 +64,10 @@ export interface Property {
   added_assessment_years: number[];
   appeal_credits: Record<string, number | null>;
   change: number | null;
+  change_q4?: number | null; // fourth-quarter bill of the last year vs a year earlier
+  change_5y?: number | null;
+  q4_bill?: Record<string, number | null>;
+  permits?: Permits;
   compare: {
     count: number;
     size_band?: number | null;
@@ -79,6 +83,30 @@ export interface Property {
   appeal: Appeal;
 }
 
+export type PermitRelevance = "likely" | "possible" | "unlikely" | "lower";
+
+export interface Permit {
+  no: string;
+  type: string;
+  category: string;
+  status: string;
+  issued: string | null;
+  applied?: string | null;
+  finished: string | null;
+  description: string | null;
+  relevance: PermitRelevance;
+  done: boolean;
+  building: boolean; // the building's permit, not this unit's
+}
+
+export interface Permits {
+  count: number;
+  building_count: number;
+  list: Permit[];
+  outlook: { state: "in_progress" | "may_be_added" | "reflected"; permit: string; relevance: PermitRelevance; year: number } | null;
+  renovated: boolean;
+}
+
 export interface Meta {
   town: string;
   county_district: string;
@@ -91,14 +119,20 @@ export interface Meta {
   valuation_date: string;
   properties: number;
   data_as_of: string | null;
+  permits?: boolean;
+  trend_years?: number;
+  rate?: Record<string, number>; // general tax rate per $100 of assessed value
+  median_change_q4?: number | null;
+  median_change_5y?: number | null;
 }
 
 export interface SearchHit {
-  pin: string;
+  pin: string; // "" for a building with several units (see units)
   address: string;
   unit: string | null;
   kind: string | null;
+  units?: number; // a building: how many properties share this address
 }
 
-// map points: [pin, lat, lon, change, appeal score]
-export type MapPoint = [string, number, number, number | null, Score | null];
+// map points: [pin, lat, lon, Q4 bill change vs a year earlier, change over 5 years]
+export type MapPoint = [string, number, number, number | null, number | null];

@@ -1,0 +1,50 @@
+name: Fetch permits
+
+# Daily: Jersey City's construction permits from the city's permit portal (EnerGov) into the hosted
+# database (`permits`, private like the rest; build-site.yml publishes a summary per property).
+# First the newest permits, then up to --max-minutes of the building-by-building history, which
+# continues where the last run stopped (the first full pass takes several runs).
+on:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+    inputs:
+      max_minutes:
+        description: "Minutes of history backfill before stopping"
+        default: "300"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: permits
+  cancel-in-progress: false
+
+jobs:
+  permits:
+    if: github.repository_owner == 'ousepachn'
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Check configuration
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::The DATABASE_URL secret is not set. See docs/hosting.md."
+            exit 1
+          fi
+      - name: Newest permits
+        shell: bash
+        run: python pipeline/fetch_permits.py recent --days 45 | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Permit history, building by building
+        shell: bash
+        run: |
+          python pipeline/fetch_permits.py backfill --max-minutes "${{ inputs.max_minutes || '300' }}" \
+            | tee -a "$GITHUB_STEP_SUMMARY"

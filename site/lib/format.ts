@@ -50,3 +50,23 @@ export function shortDate(iso: string) {
   const d = new Date(iso + "T12:00:00");
   return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
+
+export const PERMIT_CATEGORY: Record<string, string> = {
+  new_construction: "New construction",
+  addition: "Addition",
+  renovation: "Renovation or alteration",
+  demolition: "Demolition",
+  certificate: "Certificate of occupancy",
+  minor: "Repair or equipment",
+  other: "Other",
+};
+
+export const RELEVANCE: Record<string, string> = {
+  likely: "Likely raises assessment",
+  possible: "May raise assessment",
+  unlikely: "Usually no tax change",
+  lower: "May lower assessment",
+};
+
+export const isoDate = (iso: string | null | undefined) =>
+  iso ? new Date(iso + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";

@@ -35,6 +35,7 @@ jobs:
             exit 1
           fi
       - name: Load county records
+        shell: bash   # -o pipefail, so a failure isn't hidden by tee
         run: |
           python pipeline/fetch_county_records.py --town jersey-city --town hoboken --town union-city \
             | tee -a "$GITHUB_STEP_SUMMARY"

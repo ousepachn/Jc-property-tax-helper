@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { type BBox, mapPoints } from "@/lib/data";
 
-// Parcels for the maps: [pin, lat, lon, change, appeal score]. ?bbox=south,west,north,east limits it to an
+// Parcels for the maps: [pin, lat, lon, Q4 bill change, 5-year change]. ?bbox=south,west,north,east limits it to an
 // area (the property page's small map). Cached at the edge for a day. The box is widened to a 0.01° grid,
 // so there are few distinct boxes: nearby pages share cache entries, and varying the box can't make every
 // request reach the database.

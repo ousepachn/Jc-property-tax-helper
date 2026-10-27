@@ -24,8 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               Jersey City Tax Check
             </Link>
             <nav className="nav" aria-label="Main">
-              <Link href="/">Map &amp; search</Link>
-              <Link href="/appeal">How to appeal</Link>
+              <Link href="/appeal">Appeal guide</Link>
               {process.env.OWNER_ACCOUNTS === "on" && <Link href="/account">Owner sign-in</Link>}
             </nav>
           </div>
@@ -34,12 +33,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <footer>
           <div className="wrap">
             <p>
-              Built from public records: the Jersey City tax bill site, the Hudson County Board of Taxation&apos;s
-              assessment records and the State of New Jersey&apos;s parcel map and tax lists.
+              Built from public records: Jersey City&apos;s tax bills and permit portal, the Hudson County Board of
+              Taxation&apos;s assessments and the State of New Jersey&apos;s parcel map.
             </p>
             <p>
-              This is an independent tool, not a government site. The appeal check is a rough screen, not legal or
-              tax advice. Always confirm figures with the Tax Assessor.
+              An independent tool, not a government site. Not legal or tax advice; confirm figures with the Tax Assessor.
             </p>
           </div>
         </footer>
