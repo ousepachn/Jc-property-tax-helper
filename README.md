@@ -131,6 +131,17 @@ steps: an overview (latest bill, tax over time vs similar nearby properties and 
 add as an added assessment). Search understands condo units ("77 Hudson St 1205", "Unit 12", "#12"): a
 building shows once and lists its units. There is also a plain-language appeal guide.
 
+Abatements (`pipeline/abatements.py`): the county records name each exemption's statute and its start and end
+dates. A partly abated condo unit has a taxable land record (filed as class 1) plus an exempt building record
+(X, class 15F); a fully abated project is a single class 15F record with an abatement statute (N.J.S.A. 40A:20
+long-term, 40A:21 five-year, 55:14K / 55:16 affordable housing, 40:55C older urban renewal). An abatement that
+ended shows as a land-only taxable record for an existing building, followed by the building value. Abated
+properties, and those whose abatement ended within the years shown, are kept out of every comparison pool;
+every condo unit is also compared with the units in its own building by full assessed value (taxable plus
+exempt) per square foot, against a floor trend fitted with Theil-Sen so one over-assessed unit can't skew it.
+The home page has an "Abatements only" map view and citywide totals (taxable value by class, abated value,
+abatements ending soon).
+
 Try it locally without a database or secrets, on made-up data:
 
 ```

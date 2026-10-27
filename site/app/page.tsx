@@ -1,3 +1,4 @@
+import CityStats from "@/components/CityStats";
 import HomeMap from "@/components/HomeMap";
 import Search from "@/components/Search";
 import { getMeta } from "@/lib/data";
@@ -22,7 +23,12 @@ export default async function Home() {
         trendYears={meta?.trend_years ?? null}
         medianQ4={meta?.median_change_q4 ?? null}
         median5y={meta?.median_change_5y ?? null}
+        abatedCount={meta?.city?.abatement.properties ?? null}
       />
+      {meta?.city && (
+        <CityStats c={meta.city} year={last}
+          asOf={meta.data_as_of ? new Date(meta.data_as_of + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : null} />
+      )}
     </>
   );
 }

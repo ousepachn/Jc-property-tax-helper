@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import AbatementNote from "@/components/Abatement";
+import BuildingCompare from "@/components/BuildingCompare";
 import MiniMap, { type Marker } from "@/components/MiniMap";
 import { PermitAlert } from "@/components/Permits";
 import PropertyHeader from "@/components/PropertyHeader";
@@ -33,9 +35,11 @@ export default async function PropertyPage({ params }: Params) {
     <>
       <PropertyHeader p={p} step={1} />
       <BigNumbers p={p} meta={meta} />
+      <AbatementNote p={p} />
       <PermitAlert permits={p.permits} pin={p.pin} />
       <History p={p} meta={meta} />
-      <Compare p={p} meta={meta} />
+      {p.building_compare && <BuildingCompare b={p.building_compare} address={addressLine(p.address, null)} />}
+      {(p.compare.count > 0 || !p.building_compare) && <Compare p={p} meta={meta} />}
       <Link className="next" href={`/p/${p.pin}/appeal`}>
         <div>
           <span className="eyebrow" style={{ color: "inherit", opacity: 0.7 }}>Step 2</span>
@@ -61,7 +65,10 @@ function BigNumbers({ p, meta }: { p: Property; meta: Meta }) {
         <div className="bignum">
           <span className="k">Q4 {last} bill</span>
           <span className="v">{money(q4)}</span>
-          <span className="d"><b className={cls(p.change_q4)}>{pct(p.change_q4)}</b> vs Q4 {last - 1}{q4prev != null && ` (${money(q4prev)})`}</span>
+          <span className="d">
+            {p.change_q4 != null ? <><b className={cls(p.change_q4)}>{pct(p.change_q4)}</b> vs Q4 {last - 1}{q4prev != null && ` (${money(q4prev)})`}</>
+              : q4prev != null ? `Q4 ${last - 1}: ${money(q4prev)}` : null}
+          </span>
         </div>
       ) : (
         <div className="bignum">
@@ -73,8 +80,21 @@ function BigNumbers({ p, meta }: { p: Property; meta: Meta }) {
       <div className="bignum">
         <span className="k">Since {longFrom}</span>
         <span className={`v ${cls(longChange)}`}>{pct(longChange)}</span>
-        <span className="d">{money(p.tax[longFrom])} → {money(p.tax[last])} a year</span>
+        <span className="d">
+          {longChange == null && p.abatement?.status === "active" ? "abated: not comparable"
+            : longChange == null && p.abatement?.status === "ended" ? `abatement ended in ${p.abatement.year}`
+            : `${money(p.tax[longFrom])} → ${money(p.tax[last])} a year`}
+        </span>
       </div>
+      {p.compare.count === 0 && p.building_compare ? (
+        <div className="bignum">
+          <span className="k">Assessed vs your building</span>
+          <span className={`v ${cls(p.building_compare.vs_floor ?? p.building_compare.vs_median)}`}>
+            {pct(p.building_compare.vs_floor ?? p.building_compare.vs_median)}
+          </span>
+          <span className="d">per sq ft, vs {p.building_compare.vs_floor != null ? "units on similar floors" : "the typical unit"}</span>
+        </div>
+      ) : (
       <div className="bignum">
         <span className="k">Similar homes nearby, since {p.base_year}</span>
         <span className="v">{pct(p.compare.median_change)}</span>
@@ -83,6 +103,7 @@ function BigNumbers({ p, meta }: { p: Property; meta: Meta }) {
           {p.compare.city_percentile != null && `, a bigger rise than ${p.compare.city_percentile}% of similar ${kindPlural(p.kind)} citywide`}
         </span>
       </div>
+      )}
     </div>
   );
 }
@@ -94,6 +115,7 @@ function History({ p, meta }: { p: Property; meta: Meta }) {
   const flags: Record<number, string> = {};
   for (const y of p.added_assessment_years) flags[y] = "added assessment";
   for (const y of Object.keys(p.appeal_credits)) flags[Number(y)] = "appeal credit";
+  if (p.abatement?.status === "ended") flags[p.abatement.year] = "abatement ended";
   return (
     <section className="card" aria-labelledby="h-history">
       <header>
@@ -107,8 +129,8 @@ function History({ p, meta }: { p: Property; meta: Meta }) {
       <TaxChart years={years} yours={yours} theirs={theirs} flags={flags} />
       <div className="legend">
         <span><i style={{ background: "var(--you)" }} />This property</span>
-        <span><i style={{ background: "var(--them)" }} />Median of {p.compare.count} similar nearby</span>
-        {Object.keys(flags).length > 0 && <span>Large dot: added assessment or appeal credit that year</span>}
+        {p.compare.count > 0 && <span><i style={{ background: "var(--them)" }} />Median of {p.compare.count} similar nearby</span>}
+        {Object.keys(flags).length > 0 && <span>Large dot: {[...new Set(Object.values(flags))].join(", ")} that year</span>}
       </div>
       {p.added_assessment_years.length > 0 && (
         <p className="note">

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import AbatementNote from "@/components/Abatement";
 import { PermitHistory } from "@/components/Permits";
 import PropertyHeader from "@/components/PropertyHeader";
 import { getMeta, getProperty } from "@/lib/data";
@@ -29,6 +30,7 @@ export default async function AppealStep({ params }: Params) {
   return (
     <>
       <PropertyHeader p={p} step={2} />
+      <AbatementNote p={p} />
       <AppealCheck p={p} meta={meta} />
       <PermitHistory permits={p.permits} meta={meta} />
       <p className="muted">

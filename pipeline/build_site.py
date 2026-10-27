@@ -27,6 +27,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import abatements as A  # noqa: E402
 import comparables as C  # noqa: E402
 import fetch_permits as FP  # noqa: E402
 from extract_bills import BILL_EXPORT_SQL  # noqa: E402
@@ -73,30 +74,46 @@ def load_positions(path):
 
 
 def load_properties(db, cd, positions):
+    """Every taxable-roll record (M) with its assessments and abatement status (see abatements.py)."""
     coord, base, dwell = positions
-    assess = defaultdict(dict)
-    for pin, year, total in db.execute(
-            "SELECT pin, year, total FROM parcel_assessments WHERE county_district=? AND record_type='M'", (cd,)):
-        assess[pin][int(year)] = total
-    exempt = {r[0] for r in db.execute(
-        "SELECT pin FROM parcels WHERE county_district=? AND record_type='X'", (cd,))}
+    assess, parts, exempt_value = defaultdict(dict), defaultdict(dict), defaultdict(dict)
+    for pin, rt, year, land, bld, total in db.execute(
+            """SELECT pin, record_type, year, land, building, total FROM parcel_assessments
+               WHERE county_district=?""", (cd,)):
+        if rt == "M":
+            assess[pin][int(year)] = total
+            parts[pin][int(year)] = (land or 0, bld or 0)
+        else:
+            exempt_value[pin][int(year)] = total
+    exempt = {pin: (st, init, fur) for pin, st, init, fur in db.execute(
+        "SELECT pin, epl_statute, epl_init, epl_further FROM parcels WHERE county_district=? AND record_type='X'", (cd,))}
     props = {}
-    for (pin, loc, cls, q, desc, sq, yb, sd, sp, nu) in db.execute(
+    for (pin, loc, cls, q, desc, sq, yb, sd, sp, nu, st, init, fur) in db.execute(
             """SELECT pin, property_location, property_class, qualifier, building_desc, sq_ft, year_built,
-                      sale_date, sale_price, nu_code FROM parcels WHERE county_district=? AND record_type='M'""", (cd,)):
+                      sale_date, sale_price, nu_code, epl_statute, epl_init, epl_further
+               FROM parcels WHERE county_district=? AND record_type='M'""", (cd,)):
         bld = "_".join(pin.split("_")[:3])
         c = coord.get(pin) or base.get(bld)
         units = C.units_from(desc, dwell.get(pin) or dwell.get(bld))
         a = assess.get(pin, {})
         latest = a[max(a)] if a else None
+        ev = exempt_value.get(pin, {})
+        if pin in exempt:                                      # partly abated: land taxable, building exempt
+            abatement = A.active(*exempt[pin], ev[max(ev)] if ev else None, full=False)
+        elif (cls or "").startswith("15"):                     # fully exempt: an abatement only by its statute
+            abatement = A.active(st, init, fur, latest, full=True)
+        else:
+            abatement = None
+        ended = None if abatement else A.ended_year(parts.get(pin, {}), int(yb) if yb else None)
         kind = C.kind(cls, q, units)
-        if pin in exempt:
-            kind = None            # partly exempt (e.g. abated): its tax is not comparable
-        props[pin] = C.Prop(pin, (loc or "").strip(), kind, int(sq) if sq else None, int(yb) if yb else None,
-                            C.stories_from(desc), C.construction_from(desc), c[0] if c else None,
-                            c[1] if c else None, bld, latest, sd, sp, nu,
-                            {"desc": desc, "units": units, "class": cls, "qual": q, "assess": a,
-                             "abated": pin in exempt})
+        if abatement and not abatement["full"] and (q or "").startswith("C") and cls in ("1", "2"):
+            kind, cls = "condo", "2"     # an abated unit's taxable record is its land share, filed as class 1
+        props[pin] = C.Prop(pin, (loc or "").strip(), kind, int(sq) if sq else None,
+                            int(yb) if yb else None, C.stories_from(desc), C.construction_from(desc),
+                            c[0] if c else None, c[1] if c else None, bld, latest, sd, sp, nu,
+                            {"desc": desc, "units": units, "class": cls or "", "qual": q, "assess": a,
+                             "abated": bool(abatement), "abatement": abatement, "ended": ended,
+                             "full_value": (latest or 0) + ((ev[max(ev)] or 0) if ev else 0)})
     return props
 
 
@@ -220,22 +237,39 @@ def build(db, cd, positions, today=None):
     db.commit()
     base_year = FIRST_YEAR if source == "bills" else min(RATES[cd])
     base_year = max(base_year, 2023) if source == "estimated" else base_year
-    index = C.Index(props.values())
+    # Abated properties, and those whose abatement ended inside the years shown, have tax histories
+    # that say nothing about their neighbors' (or theirs about them): keep them out of every
+    # comparison pool. Abated condos are compared within their own building instead.
+    def ended_in_window(p):
+        return p.extra["ended"] is not None and p.extra["ended"] > base_year
+
+    index = C.Index(p for p in props.values() if not p.extra["abated"] and not ended_in_window(p))
 
     # citywide distribution of tax change, by type and era
     groups = defaultdict(list)
     for pin, p in props.items():
         ch = change(tax.get(pin, {}), base_year)
-        if p.kind and ch is not None:
+        if p.kind and ch is not None and not p.extra["abated"] and not ended_in_window(p):
             groups[(p.kind, p.era)].append(ch)
     for g in groups.values():
         g.sort()
+
+    # condo buildings: every unit's full assessment (taxable plus abated) per square foot
+    by_building = defaultdict(list)
+    for pin, p in props.items():
+        if p.extra["qual"] and p.kind == "condo":
+            by_building[p.building].append({"pin": pin, "unit": p.extra["qual"], "sq_ft": p.sq_ft if p.usable_size else None,
+                                            "value": p.extra["full_value"] or None, "abated": p.extra["abated"]})
+    building_cmp = {}
+    for units in by_building.values():
+        building_cmp.update(A.buildings(units))
 
     renovated_since = today.year - RENOVATION_YEARS
     out = {}
     for pin, p in props.items():
         t = tax.get(pin, {})
-        your_change = change(t, base_year)
+        ended = p.extra["ended"]
+        your_change = None if p.extra["abated"] or (ended and ended > base_year) else change(t, base_year)
         rec = {
             "pin": pin, "town": TOWNS[cd], "address": p.address, "unit": p.extra["qual"] or None,
             "kind": p.kind, "class": p.extra["class"], "sq_ft": p.sq_ft, "year_built": p.year_built,
@@ -245,12 +279,15 @@ def build(db, cd, positions, today=None):
             "added_assessment_years": sorted(added.get(pin, ())),
             "appeal_credits": {str(y): r0(v) for y, v in sorted(credits.get(pin, {}).items())},
             "change": None if your_change is None else round(your_change, 4),
-            "change_q4": r4(change(q4.get(pin, {}), LAST_YEAR - 1)),
-            "change_5y": r4(change(t, LAST_YEAR - TREND_YEARS)),
+            "change_q4": None if p.extra["abated"] or ended == LAST_YEAR else r4(change(q4.get(pin, {}), LAST_YEAR - 1)),
+            "change_5y": None if p.extra["abated"] or (ended and ended > LAST_YEAR - TREND_YEARS)
+            else r4(change(t, LAST_YEAR - TREND_YEARS)),
+            "abatement": p.extra["abatement"] or ({"status": "ended", "year": ended} if ended else None),
+            "building_compare": building_cmp.get(pin),
             "q4_bill": {str(y): r0(v) for y, v in sorted(q4.get(pin, {}).items()) if y >= LAST_YEAR - 1},
             "permits": permit_summary(pin, permits.get(FP.lot_of(pin), []), added.get(pin, ()), today),
         }
-        if p.kind and p.lat is not None and p.usable_size:
+        if p.kind and p.lat is not None and p.usable_size and not p.extra["abated"]:
             m = C.neighbors(index, p)
             nb = [(q, d) for q, d, _ in m.props]
             changes = [c for c in (change(tax.get(q.pin, {}), base_year) for q, _ in nb) if c is not None]
@@ -286,10 +323,22 @@ def build(db, cd, positions, today=None):
                  "year_built": q.year_built, "lat": round(q.lat, 6), "lon": round(q.lon, 6),
                  "sale_date": q.sale_date, "price": r0(q.sale_price), "ppsf": r0(q.sale_price / q.sq_ft),
                  "miles": round(d, 2)} for q, d, _ in sm.props]
+            bc = rec["building_compare"]
+            if bc and bc["above"]:
+                result.setdefault("notes", []).append(building_note(bc))
             rec["appeal"] = result
+        elif p.extra["abated"]:
+            rec["compare"] = {"count": 0, "reason": (
+                "This property has a tax abatement, so its tax isn't comparable with fully taxed properties."
+                + (" It is compared with the other units in its building instead." if rec["building_compare"] else ""))}
+            rec["appeal"] = {"score": "not_applicable", "reason": (
+                "While the abatement lasts, you pay the charge set in the abatement agreement rather than regular tax "
+                "on the building, so a lower assessment may not lower what you pay. Check your agreement, or ask the "
+                "Tax Assessor, before appealing.")}
+            if rec["building_compare"] and rec["building_compare"]["above"]:
+                rec["appeal"]["notes"] = [building_note(rec["building_compare"])]
         else:
-            reason = ("Partly exempt (for example an abatement), so it is not compared." if p.extra["abated"]
-                      else "This property type is not compared in this version." if not p.kind
+            reason = ("This property type is not compared in this version." if not p.kind
                       else "No usable floor area or map position for this property.")
             rec["compare"] = {"count": 0, "reason": reason}
             rec["appeal"] = {"score": "not_applicable", "reason": reason}
@@ -300,8 +349,22 @@ def build(db, cd, positions, today=None):
             "data_as_of": data_as_of, "trend_years": TREND_YEARS,
             "rate": {str(y): r for y, r in RATES[cd].items()},
             "median_change_q4": r4(C.median([r["change_q4"] for r in out.values() if r["change_q4"] is not None])),
-            "median_change_5y": r4(C.median([r["change_5y"] for r in out.values() if r["change_5y"] is not None]))}
+            "median_change_5y": r4(C.median([r["change_5y"] for r in out.values() if r["change_5y"] is not None])),
+            "city": A.city_stats([{"class": p.extra["class"], "value": p.assessment, "abatement": p.extra["abatement"],
+                                   "ended": p.extra["ended"], "unit": bool(p.extra["qual"]), "lot": p.building}
+                                  for p in props.values()], RATES[cd][LAST_YEAR], today)}
     return out, meta
+
+
+def building_note(bc):
+    how = (f"{pct_text(bc['vs_floor'])} above units on similar floors" if bc["vs_floor"] is not None
+           else f"{pct_text(bc['vs_median'])} above the typical unit")
+    return (f"Per square foot, this unit is assessed {how} in its building. Assessments in one building should "
+            "be consistent, so ask the Tax Assessor why; it can support an appeal.")
+
+
+def pct_text(x):
+    return f"{round(abs(x) * 100)}%"
 
 
 def summary_row(rec):
@@ -310,10 +373,19 @@ def summary_row(rec):
     latest = t.get(str(LAST_YEAR))
     return [rec["pin"], rec["address"], rec["unit"], rec["kind"],
             None if rec["lat"] is None else round(rec["lat"], 6), None if rec["lon"] is None else round(rec["lon"], 6),
-            latest, rec["change"], (rec.get("appeal") or {}).get("score"), rec["change_q4"], rec["change_5y"]]
+            latest, rec["change"], (rec.get("appeal") or {}).get("score"), rec["change_q4"], rec["change_5y"],
+            abatement_code(rec["abatement"])]
 
 
-SUMMARY_FIELDS = ["pin", "address", "unit", "kind", "lat", "lon", "tax", "change", "appeal", "change_q4", "change_5y"]
+def abatement_code(a):
+    """For the map: 0 none, 1 long-term, 2 five-year, 3 other abatement, 4 ended recently."""
+    if not a:
+        return 0
+    return A.LAW_CODE["ended"] if a["status"] == "ended" else A.LAW_CODE.get(a["law"], 3)
+
+
+SUMMARY_FIELDS = ["pin", "address", "unit", "kind", "lat", "lon", "tax", "change", "appeal", "change_q4", "change_5y",
+                  "abatement"]
 
 
 def write_json(out, meta, dest):
@@ -349,20 +421,23 @@ def write_postgres(db, out, meta):
     db.execute(f"""CREATE TABLE IF NOT EXISTS {SITE_SCHEMA}.properties (
         pin TEXT PRIMARY KEY, town TEXT, address TEXT, unit TEXT, kind TEXT, lat DOUBLE PRECISION,
         lon DOUBLE PRECISION, tax DOUBLE PRECISION, change DOUBLE PRECISION, appeal TEXT, data JSONB)""")
-    for col in ("change_q4", "change_5y"):                         # added after the first version
-        db.execute(f"ALTER TABLE {SITE_SCHEMA}.properties ADD COLUMN IF NOT EXISTS {col} DOUBLE PRECISION")
+    for col, typ in (("change_q4", "DOUBLE PRECISION"), ("change_5y", "DOUBLE PRECISION"), ("abatement", "SMALLINT")):
+        db.execute(f"ALTER TABLE {SITE_SCHEMA}.properties ADD COLUMN IF NOT EXISTS {col} {typ}")   # added later
     db.execute(f"CREATE TABLE IF NOT EXISTS {SITE_SCHEMA}.meta (key TEXT PRIMARY KEY, value JSONB)")
     for role in ("anon", "authenticated"):
         if db.execute("SELECT 1 FROM pg_roles WHERE rolname = ?", (role,)).fetchone():
             db.execute(f"REVOKE ALL ON SCHEMA {SITE_SCHEMA} FROM {role}")
             db.execute(f"REVOKE ALL ON ALL TABLES IN SCHEMA {SITE_SCHEMA} FROM {role}")
     db.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+    # the extension may already live in another schema (Neon: public) that isn't on our search_path
+    trgm = db.execute("""SELECT n.nspname FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace
+                         WHERE e.extname = 'pg_trgm'""").fetchone()[0]
     db.execute(f"CREATE INDEX IF NOT EXISTS properties_address_trgm ON {SITE_SCHEMA}.properties "
-               "USING gin (address gin_trgm_ops)")
+               f'USING gin (address "{trgm}".gin_trgm_ops)')
     db.execute(f"DELETE FROM {SITE_SCHEMA}.properties WHERE town = ?", (meta["town"],))
     db.executemany(f"""INSERT INTO {SITE_SCHEMA}.properties
-                       (pin, town, address, unit, kind, lat, lon, tax, change, appeal, change_q4, change_5y, data)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""", rows)
+                       (pin, town, address, unit, kind, lat, lon, tax, change, appeal, change_q4, change_5y, abatement, data)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", rows)
     db.execute(f"""INSERT INTO {SITE_SCHEMA}.meta VALUES (?, ?)
                    ON CONFLICT (key) DO UPDATE SET value = excluded.value""",
                (meta["county_district"], json.dumps(meta)))
