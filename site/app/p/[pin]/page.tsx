@@ -5,6 +5,7 @@ import AbatementNote from "@/components/Abatement";
 import BuildingCompare from "@/components/BuildingCompare";
 import MiniMap, { type Marker } from "@/components/MiniMap";
 import { PermitAlert } from "@/components/Permits";
+import PropertyFeedback from "@/components/PropertyFeedback";
 import PropertyHeader from "@/components/PropertyHeader";
 import TaxChart from "@/components/TaxChart";
 import { getMeta, getProperty } from "@/lib/data";
@@ -48,6 +49,7 @@ export default async function PropertyPage({ params }: Params) {
         </div>
         <span className="arrow" aria-hidden="true">→</span>
       </Link>
+      <PropertyFeedback pin={p.pin} />
     </>
   );
 }

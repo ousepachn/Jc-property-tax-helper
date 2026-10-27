@@ -2,6 +2,7 @@
 
 // Address search. A condo building shows as one result; choosing it lists its units, and typing a unit
 // number narrows them ("77 Hudson St 1205", "77 Hudson St, Unit 12", "#12" all work).
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import type { SearchHit } from "@/lib/types";
@@ -38,7 +39,12 @@ export default function Search({ autoFocus = false, large = false }: { autoFocus
     };
   }, [q]);
 
+  const remember = () => {
+    try { sessionStorage.setItem("lastSearch", q.trim()); } catch {}   // pre-fills the feedback form
+  };
+
   const choose = (h: SearchHit) => {
+    remember();
     if (h.units) {
       // a building: list its units, ready for the unit number
       setQ(`${addressLine(h.address, null)}, Unit `);
@@ -82,7 +88,8 @@ export default function Search({ autoFocus = false, large = false }: { autoFocus
           {hits.length === 0 && (
             <li className="none">
               {unitMode ? "No unit at that address matches. Check the unit number, or remove it to see the building." :
-                "No Jersey City property matches. Try just the number and street, like “280 Grove”."}
+                "No Jersey City property matches. Try just the number and street, like “280 Grove”."}{" "}
+              <Link href={`/feedback?topic=not_found&q=${encodeURIComponent(q.trim())}`}>Still can&apos;t find it? Tell us</Link>
             </li>
           )}
           {hits.map((h, i) => (

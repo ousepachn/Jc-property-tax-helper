@@ -259,3 +259,10 @@ details.more > summary::-webkit-details-marker { display: none; }
 .sharelegend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; color: var(--muted); }
 .sharelegend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
 .sharelegend b { color: var(--ink); font-weight: 650; font-variant-numeric: tabular-nums; }
+
+/* feedback form */
+.form select, .form textarea { font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.form textarea { resize: vertical; min-height: 140px; line-height: 1.5; }
+.form select:focus, .form textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.form .cta:disabled { opacity: 0.6; cursor: default; }
+.results .none a { display: inline; padding: 0; white-space: nowrap; color: var(--accent); text-decoration: underline; }

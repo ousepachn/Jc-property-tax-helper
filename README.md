@@ -142,6 +142,12 @@ exempt) per square foot, against a floor trend fitted with Theil-Sen so one over
 The home page has an "Abatements only" map view and citywide totals (taxable value by class, abated value,
 abatements ending soon).
 
+Feedback: `/feedback` (general), `/feedback?pin=…` (linked from every property page, about that property) and
+`/feedback?q=…&topic=not_found` (linked when a search finds nothing). The form pre-fills what the visitor typed in
+the search box. Each message is saved as a small JSON file in the site's private Neon Object Storage bucket
+(`feedback/YYYY-MM/`), so the database role stays read-only. Read them as CSV:
+`cd site && node --env-file=.env.local scripts/feedback.mjs > feedback.csv`.
+
 Try it locally without a database or secrets, on made-up data:
 
 ```
