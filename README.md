@@ -129,7 +129,17 @@ colored by the Q4 bill's change from a year earlier (default) or by the 5-year c
 steps: an overview (latest bill, tax over time vs similar nearby properties and the city) and an appeal step
 (the appeal check with the comparable sales it used, plus the property's permits and what finished work could
 add as an added assessment). Search understands condo units ("77 Hudson St 1205", "Unit 12", "#12"): a
-building shows once and lists its units. There is also a plain-language appeal guide. It reads the
+building shows once and lists its units. There is also a plain-language appeal guide.
+
+Try it locally without a database or secrets, on made-up data:
+
+```
+python scripts/demo_site_data.py      # writes site/data
+cd site && npm install && npm run dev  # http://localhost:3000; try "102 Grove St" or "77 Hudson St 1201"
+```
+
+With real data instead: `python pipeline/build_site.py --parcels data/raw/njogis/parcels_hudson.csv --json-out site/data`
+with `DATABASE_URL` set (reads the database, writes only local files). It reads the
 public-fields-only `site` schema, rebuilt daily by `pipeline/build_site.py`
 (`.github/workflows/build-site.yml`). Similar properties: same type, floor area within ±10% (at most
 ±15%), same era, nearby; see `pipeline/comparables.py`. Setup: [docs/hosting.md](docs/hosting.md#5-publish-the-website-vercel).
