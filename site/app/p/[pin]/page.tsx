@@ -129,7 +129,7 @@ function History({ p, meta }: { p: Property; meta: Meta }) {
       <TaxChart years={years} yours={yours} theirs={theirs} flags={flags} />
       <div className="legend">
         <span><i style={{ background: "var(--you)" }} />This property</span>
-        <span><i style={{ background: "var(--them)" }} />Median of {p.compare.count} similar nearby</span>
+        {p.compare.count > 0 && <span><i style={{ background: "var(--them)" }} />Median of {p.compare.count} similar nearby</span>}
         {Object.keys(flags).length > 0 && <span>Large dot: {[...new Set(Object.values(flags))].join(", ")} that year</span>}
       </div>
       {p.added_assessment_years.length > 0 && (

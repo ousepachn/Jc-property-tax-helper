@@ -37,7 +37,7 @@ export default function CityStats({ c, year, asOf }: { c: Stats; year: number; a
           {c.by_class.map((g, i) => <span key={g.label} style={{ width: `${(g.share ?? 0) * 100}%`, background: SHARE_COLORS[i] }} />)}
         </div>
         <div className="sharelegend">
-          {c.by_class.map((g, i) => (
+          {c.by_class.map((g, i) => (g.share ?? 0) < 0.005 ? null : (
             <span key={g.label}><i style={{ background: SHARE_COLORS[i] }} />{g.label} <b>{ratioPct(g.share, 0)}</b></span>
           ))}
         </div>

@@ -9,8 +9,9 @@ import type { MapPoint } from "@/lib/types";
 export type Metric = "q4" | "5y";
 export const METRIC_COL: Record<Metric, 3 | 4> = { q4: 3, "5y": 4 };
 const BINS: Record<Metric, number[]> = { q4: [0.05, 0.15, 0.25, 0.35, 0.5], "5y": [0.2, 0.45, 0.7, 0.95, 1.3] };
-const COLORS_LIGHT = ["#2b6f9e", "#6ea6c9", "#c9d0d3", "#e9a35c", "#d4622b", "#a3301b"];
-const COLORS_DARK = ["#5aa4d6", "#3d6f8f", "#4a5961", "#b27839", "#d5703c", "#e9553b"];
+// the middle class ("most properties") is a light sand, distinct from the faint grey of no data
+const COLORS_LIGHT = ["#2b6f9e", "#6ea6c9", "#d8c9a6", "#e9a35c", "#d4622b", "#a3301b"];
+const COLORS_DARK = ["#5aa4d6", "#3d6f8f", "#7d7055", "#b27839", "#d5703c", "#e9553b"];
 
 function bin(change: number | null, bins: number[]) {
   if (change == null) return -1;
@@ -95,7 +96,7 @@ export default function MapView({ metric, label, abated = false }: { metric: Met
     // draw grey (no data, or not abated) first, then each class, so colors stay on top
     for (let b = -1; b < colors.length; b++) {
       ctx.fillStyle = b < 0 ? (dark.current ? "#334047" : "#dfe5e9") : colors[b];
-      ctx.globalAlpha = b < 0 && abated ? 0.45 : 1;
+      ctx.globalAlpha = b < 0 ? (abated ? 0.45 : 0.6) : 1;
       ctx.beginPath();
       for (let i = 0; i < points.length; i++) {
         if (classOf(points[i]) !== b) continue;
