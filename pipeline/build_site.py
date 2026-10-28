@@ -151,8 +151,9 @@ def load_taxes(db, cd, props):
         # categorized here from the bill kind, not the stored category, so bills fetched before a
         # category was added (abatement_charge) count too
         abated = {r[0] for r in db.execute(
-            f"""SELECT DISTINCT pin FROM ({BILL_EXPORT_SQL}) b WHERE county_district=? AND (kind LIKE 'c138%'
-                OR kind LIKE 'pilot%' OR kind LIKE 'ab-%' OR kind LIKE '%abatement%')""", (cd,))}
+            # patterns as parameters: a literal % in the SQL is a placeholder to the Postgres driver
+            f"""SELECT DISTINCT pin FROM ({BILL_EXPORT_SQL}) b WHERE county_district=? AND (kind LIKE ?
+                OR kind LIKE ? OR kind LIKE ? OR kind LIKE ?)""", (cd, "c138%", "pilot%", "ab-%", "%abatement%"))}
         taxed = {r[0] for r in db.execute(
             f"SELECT DISTINCT pin FROM ({BILL_EXPORT_SQL}) b WHERE county_district=? AND kind = 'tax'", (cd,))}
 
