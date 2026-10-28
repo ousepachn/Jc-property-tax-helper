@@ -16,6 +16,8 @@
     "@neon/env": "1.6.5",
     "@neondatabase/auth": "0.7.0-beta",
     "@neondatabase/serverless": "1.2.0",
+    "@vercel/analytics": "2.0.1",
+    "@vercel/speed-insights": "2.0.0",
     "files-sdk": "3.1.2",
     "next": "16.4.3",
     "react": "19.2.9",
