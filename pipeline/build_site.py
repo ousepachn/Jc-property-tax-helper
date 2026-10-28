@@ -118,6 +118,23 @@ def load_properties(db, cd, positions):
     return props
 
 
+# On an account billed an abatement charge, the charge itself is often named after the project
+# ('Lhn- gulls cove', '700 grove st', 'New liberty') beside the recognizable county share and admin
+# fee ('C138-...', 'Pilot-...'). There, any other named bill is the charge, except these.
+NOT_A_CHARGE = re.compile(r"water|sewer|^sid|fee|nsf|check|transfer|payment|billing|interest|hotel|lien|"
+                          r"sale|refund|credit|tax_adv|adjustment$")
+
+
+def abatement_category(kind, fully_abated=False):
+    """categorize() for an account known to pay an abatement charge. On a fully abated account (no
+    regular tax at all) a billing adjustment can only correct the charge."""
+    category = categorize(kind)
+    if category == "other" and (kind == "true_up_adjustment" or not NOT_A_CHARGE.search(kind)
+                                or (fully_abated and kind == "billing_adjustment")):
+        return "abatement_charge"          # true-up: the year-end reconciliation of a PILOT
+    return category
+
+
 def load_taxes(db, cd, props):
     """Tax by year per pin from bills, or estimated from assessments when the crawler has not run.
 
@@ -133,11 +150,20 @@ def load_taxes(db, cd, props):
     if has_bills:
         # categorized here from the bill kind, not the stored category, so bills fetched before a
         # category was added (abatement_charge) count too
+        abated = {r[0] for r in db.execute(
+            f"""SELECT DISTINCT pin FROM ({BILL_EXPORT_SQL}) b WHERE county_district=? AND (kind LIKE 'c138%'
+                OR kind LIKE 'pilot%' OR kind LIKE 'ab-%' OR kind LIKE '%abatement%')""", (cd,))}
+        taxed = {r[0] for r in db.execute(
+            f"SELECT DISTINCT pin FROM ({BILL_EXPORT_SQL}) b WHERE county_district=? AND kind = 'tax'", (cd,))}
+
+        def category_of(pin, kind):
+            return abatement_category(kind, pin not in taxed) if pin in abated else categorize(kind)
+
         for pin, year, kind, amount in db.execute(
                 f"""SELECT pin, tax_year, kind, SUM(amount) FROM ({BILL_EXPORT_SQL}) b
                     WHERE county_district=? AND tax_year BETWEEN ? AND ?
                     GROUP BY pin, tax_year, kind""", (cd, FIRST_YEAR, LAST_YEAR + 1)):
-            year, amount, category = int(year), float(amount or 0), categorize(kind)
+            year, amount, category = int(year), float(amount or 0), category_of(pin, kind)
             if category in ("property_tax", "abatement_charge") and year <= LAST_YEAR:
                 # what the owner was billed: regular tax plus, while abated, the abatement charge
                 tax[pin][year] = tax[pin].get(year, 0) + amount
@@ -151,7 +177,7 @@ def load_taxes(db, cd, props):
                 f"""SELECT pin, tax_year, kind, SUM(amount) FROM ({BILL_EXPORT_SQL}) b
                     WHERE county_district=? AND tax_year BETWEEN ? AND ? AND quarter = 4
                     GROUP BY pin, tax_year, kind""", (cd, FIRST_YEAR, LAST_YEAR)):
-            if amount and (kind == "tax" or categorize(kind) == "abatement_charge"):
+            if amount and (kind == "tax" or category_of(pin, kind) == "abatement_charge"):
                 q4[pin][int(year)] = q4[pin].get(int(year), 0) + float(amount)
         q4 = defaultdict(dict, {p: {y: v for y, v in ys.items() if v > 0} for p, ys in q4.items()})
         return tax, added, credits, q4, charges, "bills"
@@ -241,6 +267,13 @@ def build(db, cd, positions, today=None):
     today = today or date.today()
     props = load_properties(db, cd, positions)
     tax, added, credits, q4, charges, source = load_taxes(db, cd, props)
+    if source == "bills":
+        # a building that came onto the roll without the bills ever carrying an abatement charge was
+        # newly built (or its value newly assessed), not leaving an abatement
+        for pin, p in props.items():
+            e = p.extra["ended"]
+            if e and not charges.get(pin) and any(y < e for y in tax.get(pin, {})):
+                p.extra["ended"] = None
     permits = load_permits(db, cd)
     data_as_of = db.execute("SELECT MAX(data_as_of) FROM parcels WHERE county_district=?", (cd,)).fetchone()[0]
     # end the read transaction: the build below takes minutes, and Postgres drops a connection

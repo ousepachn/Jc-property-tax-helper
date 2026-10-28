@@ -72,8 +72,9 @@ export const isoDate = (iso: string | null | undefined) =>
   iso ? new Date(iso + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
 
 export const LAW: Record<string, { short: string; long: string }> = {
-  long_term: { short: "Long-term", long: "a long-term tax abatement (N.J.S.A. 40A:20, up to 30 years)" },
-  five_year: { short: "5-year", long: "a five-year tax abatement (N.J.S.A. 40A:21)" },
+  long_term: { short: "Long-term (40A:20)", long: "a long-term tax abatement (N.J.S.A. 40A:20)" },
+  // filed under the Five-Year Exemption and Abatement Law, but Jersey City's run 20-30 years: label by statute
+  five_year: { short: "40A:21", long: "a tax abatement under N.J.S.A. 40A:21" },
   affordable: { short: "Affordable housing", long: "an affordable-housing tax exemption" },
   urban_renewal: { short: "Urban renewal", long: "an urban-renewal tax abatement (older law)" },
   other: { short: "Other", long: "a partial tax exemption" },

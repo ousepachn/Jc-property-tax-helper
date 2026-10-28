@@ -7,7 +7,8 @@ a negotiated annual charge instead (a PILOT). The county records show this two w
   - fully abated (whole projects): the only record is class 15F, carrying an abatement statute.
 Either way the record names the statute and the exemption's start and end dates (MMDDYY).
   N.J.S.A. 40A:20  Long Term Tax Exemption Law (up to 30 years)
-  N.J.S.A. 40A:21  Five-Year Exemption and Abatement Law
+  N.J.S.A. 40A:21  Five-Year Exemption and Abatement Law (yet Jersey City's run 20-30 years, so the
+                   site labels them by statute, not as "five-year")
   N.J.S.A. 55:14K, 55:16  affordable-housing exemptions;  40:55C  older urban renewal law
 Other class 15 statutes (public, religious, charitable property) are exemptions, not abatements.
 

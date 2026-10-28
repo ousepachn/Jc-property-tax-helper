@@ -152,3 +152,38 @@ def test_build_counts_abatement_charges_as_paid(tmp_path):
     assert r["abatement"] == {"status": "ended", "year": 2026}
     house = out["0906_100_1"]
     assert not any(n["pin"] == pin for n in house["compare"]["list"])  # still kept out of other properties' pools
+
+
+def test_project_named_charges_count_on_abated_accounts():
+    # real labels from Jersey City bills: the charge is often named after the project
+    for kind in ("lhn-_gulls_cove", "700_grove_st", "rialto-capitol", "new_liberty", "true_up_adjustment"):
+        assert B.abatement_category(kind) == "abatement_charge", kind
+    for kind in ("water", "sewer", "sid_exchange_pl", "bad_check_fee_adjustment", "nsf_chk_reversal_adjustment",
+                 "transfer_to/from_qtr_adjustment", "payment_adjustment", "billing_adjustment"):
+        assert B.abatement_category(kind) == "other", kind
+    assert B.abatement_category("billing_adjustment", fully_abated=True) == "abatement_charge"
+    assert B.abatement_category("tax") == "property_tax"
+
+
+def test_project_named_charge_and_new_building(tmp_path):
+    import extract_bills
+    path, parcels = make_store(tmp_path)
+    db = extract_bills.connect(path)
+    rows = []
+    for acct, pin, lines in (
+        ("1", "0906_400_2_C0010", [("tax", 200.0), ("c138-county_chg", 100.0), ("lhn-_gulls_cove", 4000.0),
+                                   ("water", 300.0)]),
+        ("2", "0906_400_2_C0020", [("tax", 200.0)]),      # never a charge: building added, not an abatement ending
+    ):
+        db.execute("INSERT INTO accounts (county_district, account_id, pin, status, fetched_at) VALUES (?,?,?,?,?)",
+                   ("0906", acct, pin, "done", "2026-10-01"))
+        for y in range(2019, 2026):
+            rows += [("0906", acct, y, 1, f"{y}-02-01", k, "other", a, 0.0, 0.0) for k, a in lines]
+    db.executemany(f"INSERT INTO bills ({', '.join(extract_bills.BILL_COLUMNS)}) VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
+    db.commit()
+    out, meta = B.build(B.connect(path), "0906", B.load_positions(parcels), today=date(2026, 10, 27))
+    a = out["0906_400_2_C0010"]
+    assert a["abatement_charges"]["2020"] == 4100 and a["tax"]["2020"] == 4300   # water left out
+    assert a["abatement"] == {"status": "ended", "year": 2026}
+    b = out["0906_400_2_C0020"]
+    assert b["abatement"] is None and b["abatement_charges"] == {}
