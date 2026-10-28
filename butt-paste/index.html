@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Butt Paste</title>
+  <meta name="description" content="Diaper rash paste for happy little bottoms. Find it on Amazon.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍑</text></svg>">
+  <style>
+    :root {
+      --bg: #fff8f3;
+      --card: #ffffff;
+      --text: #2b2118;
+      --muted: #6f6258;
+      --accent: #ff9900;
+      --accent-text: #1a1a1a;
+      --border: #f0e2d6;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1b1714;
+        --card: #26201b;
+        --text: #f5ece4;
+        --muted: #b8aa9e;
+        --border: #3a3029;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 16px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.5;
+    }
+    main {
+      width: 100%;
+      max-width: 480px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 40px 28px;
+      text-align: center;
+    }
+    .emoji { font-size: 64px; line-height: 1; }
+    h1 { margin: 16px 0 8px; font-size: 2rem; }
+    p { margin: 0 0 24px; color: var(--muted); }
+    ul {
+      text-align: left;
+      margin: 0 auto 28px;
+      padding-left: 1.2em;
+      max-width: 320px;
+    }
+    .btn {
+      display: inline-block;
+      width: 100%;
+      padding: 14px 20px;
+      border-radius: 12px;
+      background: var(--accent);
+      color: var(--accent-text);
+      font-weight: 700;
+      font-size: 1.1rem;
+      text-decoration: none;
+    }
+    .btn:hover, .btn:focus-visible { filter: brightness(0.95); }
+    small {
+      display: block;
+      margin-top: 24px;
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="emoji" aria-hidden="true">🍑</div>
+    <h1>Butt Paste</h1>
+    <p>Diaper rash relief for happy little bottoms.</p>
+    <ul>
+      <li>Soothes and protects irritated skin</li>
+      <li>Thick zinc oxide barrier</li>
+      <li>Pediatrician-trusted classic</li>
+    </ul>
+    <!-- Replace YOURTAG-20 with your Amazon Associates tracking ID. -->
+    <a class="btn" href="https://www.amazon.com/s?k=butt+paste&amp;tag=YOURTAG-20"
+       rel="sponsored nofollow noopener" target="_blank">Shop on Amazon</a>
+    <small>As an Amazon Associate I earn from qualifying purchases.</small>
+  </main>
+</body>
+</html>
