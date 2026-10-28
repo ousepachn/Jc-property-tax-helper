@@ -31,6 +31,7 @@ import abatements as A  # noqa: E402
 import comparables as C  # noqa: E402
 import fetch_permits as FP  # noqa: E402
 from extract_bills import BILL_EXPORT_SQL  # noqa: E402
+from portals.models import categorize  # noqa: E402
 from store import connect  # noqa: E402
 
 TOWNS = {"0906": "Jersey City"}       # v1: Jersey City only
@@ -120,30 +121,40 @@ def load_properties(db, cd, positions):
 def load_taxes(db, cd, props):
     """Tax by year per pin from bills, or estimated from assessments when the crawler has not run.
 
-    Also the fourth-quarter bill by year (regular tax only): the newest bill an owner holds, and in
-    New Jersey the one that carries a year's whole rate increase (Q1-Q2 are half of last year's tax)."""
+    Tax from bills is what the owner was billed: regular, added and omitted tax plus, for an abated
+    property, the abatement charge it pays instead of tax on the building (returned separately too).
+    Also the fourth-quarter bill by year (regular tax and abatement charge): the newest bill an owner
+    holds, and in New Jersey the one that carries a year's whole rate increase (Q1-Q2 are half of
+    last year's tax)."""
     tax, added, credits, q4 = defaultdict(dict), defaultdict(set), defaultdict(dict), defaultdict(dict)
+    charges = defaultdict(dict)
     has_bills = table_exists(db, "bills") and db.execute(
         "SELECT 1 FROM bills WHERE county_district=? LIMIT 1", (cd,)).fetchone()
     if has_bills:
-        for pin, year, kind, category, amount in db.execute(
-                f"""SELECT pin, tax_year, kind, category, SUM(amount) FROM ({BILL_EXPORT_SQL}) b
-                    WHERE county_district=? AND tax_year BETWEEN ? AND ? AND category != 'other'
-                    GROUP BY pin, tax_year, kind, category""", (cd, FIRST_YEAR, LAST_YEAR + 1)):
-            year, amount = int(year), float(amount or 0)
-            if category == "property_tax" and year <= LAST_YEAR:
+        # categorized here from the bill kind, not the stored category, so bills fetched before a
+        # category was added (abatement_charge) count too
+        for pin, year, kind, amount in db.execute(
+                f"""SELECT pin, tax_year, kind, SUM(amount) FROM ({BILL_EXPORT_SQL}) b
+                    WHERE county_district=? AND tax_year BETWEEN ? AND ?
+                    GROUP BY pin, tax_year, kind""", (cd, FIRST_YEAR, LAST_YEAR + 1)):
+            year, amount, category = int(year), float(amount or 0), categorize(kind)
+            if category in ("property_tax", "abatement_charge") and year <= LAST_YEAR:
+                # what the owner was billed: regular tax plus, while abated, the abatement charge
                 tax[pin][year] = tax[pin].get(year, 0) + amount
+            if category == "abatement_charge" and year <= LAST_YEAR and amount:
+                charges[pin][year] = charges[pin].get(year, 0) + amount
             if kind == "added" and amount > 0:
                 added[pin].add(year)
             if category == "appeal_adjustment" and amount < -1:
                 credits[pin][year] = credits[pin].get(year, 0) + amount
-        for pin, year, amount in db.execute(
-                f"""SELECT pin, tax_year, SUM(amount) FROM ({BILL_EXPORT_SQL}) b
-                    WHERE county_district=? AND tax_year BETWEEN ? AND ? AND kind = 'tax' AND quarter = 4
-                    GROUP BY pin, tax_year""", (cd, FIRST_YEAR, LAST_YEAR)):
-            if amount and amount > 0:
-                q4[pin][int(year)] = float(amount)
-        return tax, added, credits, q4, "bills"
+        for pin, year, kind, amount in db.execute(
+                f"""SELECT pin, tax_year, kind, SUM(amount) FROM ({BILL_EXPORT_SQL}) b
+                    WHERE county_district=? AND tax_year BETWEEN ? AND ? AND quarter = 4
+                    GROUP BY pin, tax_year, kind""", (cd, FIRST_YEAR, LAST_YEAR)):
+            if amount and (kind == "tax" or categorize(kind) == "abatement_charge"):
+                q4[pin][int(year)] = q4[pin].get(int(year), 0) + float(amount)
+        q4 = defaultdict(dict, {p: {y: v for y, v in ys.items() if v > 0} for p, ys in q4.items()})
+        return tax, added, credits, q4, charges, "bills"
     rates = RATES[cd]
     for pin, p in props.items():
         for year, total in p.extra["assess"].items():
@@ -153,7 +164,7 @@ def load_taxes(db, cd, props):
         for year in t:
             if year - 1 in t:      # Q3 + Q4 = the year's tax less the first half (half of last year's)
                 q4[pin][year] = (t[year] - t[year - 1] / 2) / 2
-    return tax, added, credits, q4, "estimated"
+    return tax, added, credits, q4, charges, "estimated"
 
 
 def load_permits(db, cd):
@@ -229,7 +240,7 @@ def r4(x):
 def build(db, cd, positions, today=None):
     today = today or date.today()
     props = load_properties(db, cd, positions)
-    tax, added, credits, q4, source = load_taxes(db, cd, props)
+    tax, added, credits, q4, charges, source = load_taxes(db, cd, props)
     permits = load_permits(db, cd)
     data_as_of = db.execute("SELECT MAX(data_as_of) FROM parcels WHERE county_district=?", (cd,)).fetchone()[0]
     # end the read transaction: the build below takes minutes, and Postgres drops a connection
@@ -269,7 +280,11 @@ def build(db, cd, positions, today=None):
     for pin, p in props.items():
         t = tax.get(pin, {})
         ended = p.extra["ended"]
-        your_change = None if p.extra["abated"] or (ended and ended > base_year) else change(t, base_year)
+        # An abated (or recently un-abated) property's tax history means something only when the bills
+        # carry its abatement charge; estimated from assessments it shows the land tax alone.
+        paid = bool(charges.get(pin))
+        unclear = not paid and (p.extra["abated"] or (ended and ended > base_year))
+        your_change = None if unclear else change(t, base_year)
         rec = {
             "pin": pin, "town": TOWNS[cd], "address": p.address, "unit": p.extra["qual"] or None,
             "kind": p.kind, "class": p.extra["class"], "sq_ft": p.sq_ft, "year_built": p.year_built,
@@ -279,9 +294,11 @@ def build(db, cd, positions, today=None):
             "added_assessment_years": sorted(added.get(pin, ())),
             "appeal_credits": {str(y): r0(v) for y, v in sorted(credits.get(pin, {}).items())},
             "change": None if your_change is None else round(your_change, 4),
-            "change_q4": None if p.extra["abated"] or ended == LAST_YEAR else r4(change(q4.get(pin, {}), LAST_YEAR - 1)),
-            "change_5y": None if p.extra["abated"] or (ended and ended > LAST_YEAR - TREND_YEARS)
+            "change_q4": None if not paid and (p.extra["abated"] or ended == LAST_YEAR)
+            else r4(change(q4.get(pin, {}), LAST_YEAR - 1)),
+            "change_5y": None if not paid and (p.extra["abated"] or (ended and ended > LAST_YEAR - TREND_YEARS))
             else r4(change(t, LAST_YEAR - TREND_YEARS)),
+            "abatement_charges": {str(y): r0(v) for y, v in sorted(charges.get(pin, {}).items())},
             "abatement": p.extra["abatement"] or ({"status": "ended", "year": ended} if ended else None),
             "building_compare": building_cmp.get(pin),
             "q4_bill": {str(y): r0(v) for y, v in sorted(q4.get(pin, {}).items()) if y >= LAST_YEAR - 1},

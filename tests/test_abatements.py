@@ -114,3 +114,41 @@ def test_build_abated_and_ended(tmp_path):
     ab = meta["city"]["abatement"]
     assert (ab["properties"], ab["units"], ab["buildings"], ab["ended_recently"]) == (12, 12, 1, 3)
     assert meta["city"]["taxable_value"] > 0
+
+
+def test_abatement_charges_are_categorized():
+    from portals.models import categorize
+    assert categorize("ab-95_van_dam") == "abatement_charge"
+    assert categorize("c138-admin_fee") == "abatement_charge" and categorize("c138-county_chg") == "abatement_charge"
+    assert categorize("prorated_abatement") == "abatement_charge"
+    assert categorize("tax") == "property_tax" and categorize("water") == "other"
+    assert categorize("cancel_hudson_cty_bd_adjustment") == "appeal_adjustment"
+
+
+def test_build_counts_abatement_charges_as_paid(tmp_path):
+    """300 Communipaw-style: land tax plus the abatement charge until 2025, then full tax."""
+    import extract_bills
+    path, parcels = make_store(tmp_path)
+    db = extract_bills.connect(path)
+    pin = "0906_400_2_C0010"
+    db.execute("INSERT INTO accounts (county_district, account_id, pin, status, fetched_at) VALUES (?,?,?,?,?)",
+               ("0906", "1", pin, "done", "2026-10-01"))
+    bills = []
+    for y in range(2019, 2027):
+        land_tax = 700 + 40 * (y - 2019)
+        for q in (1, 2, 3, 4):
+            bills.append((y, q, "tax", land_tax / 4 if y < 2026 else 19000 / 4))
+            if y < 2025:
+                bills += [(y, q, "ab-95_van_dam", 2000.0 + 100 * (y - 2019)), (y, q, "c138-county_chg", 110.0)]
+    db.executemany(f"INSERT INTO bills ({', '.join(extract_bills.BILL_COLUMNS)}) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                   [("0906", "1", y, q, f"{y}-0{q}-01", k, "other" if k != "tax" else "property_tax", a, 0.0, 0.0)
+                    for y, q, k, a in bills])          # stored as 'other', as bills fetched before this change are
+    db.commit()
+    out, meta = B.build(B.connect(path), "0906", B.load_positions(parcels), today=date(2026, 10, 27))
+    r = out[pin]
+    assert r["abatement_charges"]["2020"] == 4 * (2100 + 110)
+    assert r["tax"]["2020"] == 740 + 4 * (2100 + 110)                  # land tax plus what was paid instead
+    assert r["change"] is not None and r["change_5y"] is not None       # real payments: comparable over time
+    assert r["abatement"] == {"status": "ended", "year": 2026}
+    house = out["0906_100_1"]
+    assert not any(n["pin"] == pin for n in house["compare"]["list"])  # still kept out of other properties' pools

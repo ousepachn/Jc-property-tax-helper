@@ -47,9 +47,16 @@ export function normalizeQuery(q: string) {
 const ALIASES: Record<string, string[]> = {
   STREET: ["ST"], AVENUE: ["AVE"], AV: ["AVE"], BOULEVARD: ["BLVD"], PLACE: ["PL"], DRIVE: ["DR"], ROAD: ["RD"],
   TERRACE: ["TER"], COURT: ["CT"], LANE: ["LN"], PARKWAY: ["PKWY"], HIGHWAY: ["HWY"], SQUARE: ["SQ"],
-  JFK: ["KENNEDY"], MLK: ["KING"], FIRST: ["1ST"], SECOND: ["2ND"], THIRD: ["3RD"], FOURTH: ["4TH"], FIFTH: ["5TH"],
-  SIXTH: ["6TH"], SEVENTH: ["7TH"], EIGHTH: ["8TH"], NINTH: ["9TH"], TENTH: ["10TH"],
+  JFK: ["KENNEDY"], MLK: ["KING"],
 };
+// Numbered streets: Jersey City's roll mostly spells them out ("349 SEVENTH ST"), people type "7th".
+const ORDINALS = ["FIRST", "SECOND", "THIRD", "FOURTH", "FIFTH", "SIXTH", "SEVENTH", "EIGHTH", "NINTH", "TENTH",
+  "ELEVENTH", "TWELFTH", "THIRTEENTH", "FOURTEENTH", "FIFTEENTH", "SIXTEENTH", "SEVENTEENTH", "EIGHTEENTH"];
+ORDINALS.forEach((word, i) => {
+  const n = i + 1, digits = `${n}${n % 10 === 1 && n !== 11 ? "ST" : n % 10 === 2 && n !== 12 ? "ND" : n % 10 === 3 && n !== 13 ? "RD" : "TH"}`;
+  ALIASES[word] = [digits];
+  ALIASES[digits] = [word];
+});
 
 export interface ParsedQuery {
   terms: string[][]; // each word with its alternatives
