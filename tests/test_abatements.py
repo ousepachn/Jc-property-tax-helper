@@ -114,3 +114,76 @@ def test_build_abated_and_ended(tmp_path):
     ab = meta["city"]["abatement"]
     assert (ab["properties"], ab["units"], ab["buildings"], ab["ended_recently"]) == (12, 12, 1, 3)
     assert meta["city"]["taxable_value"] > 0
+
+
+def test_abatement_charges_are_categorized():
+    from portals.models import categorize
+    assert categorize("ab-95_van_dam") == "abatement_charge"
+    assert categorize("c138-admin_fee") == "abatement_charge" and categorize("c138-county_chg") == "abatement_charge"
+    assert categorize("prorated_abatement") == "abatement_charge"
+    assert categorize("tax") == "property_tax" and categorize("water") == "other"
+    assert categorize("cancel_hudson_cty_bd_adjustment") == "appeal_adjustment"
+
+
+def test_build_counts_abatement_charges_as_paid(tmp_path):
+    """300 Communipaw-style: land tax plus the abatement charge until 2025, then full tax."""
+    import extract_bills
+    path, parcels = make_store(tmp_path)
+    db = extract_bills.connect(path)
+    pin = "0906_400_2_C0010"
+    db.execute("INSERT INTO accounts (county_district, account_id, pin, status, fetched_at) VALUES (?,?,?,?,?)",
+               ("0906", "1", pin, "done", "2026-10-01"))
+    bills = []
+    for y in range(2019, 2027):
+        land_tax = 700 + 40 * (y - 2019)
+        for q in (1, 2, 3, 4):
+            bills.append((y, q, "tax", land_tax / 4 if y < 2026 else 19000 / 4))
+            if y < 2025:
+                bills += [(y, q, "ab-95_van_dam", 2000.0 + 100 * (y - 2019)), (y, q, "c138-county_chg", 110.0)]
+    db.executemany(f"INSERT INTO bills ({', '.join(extract_bills.BILL_COLUMNS)}) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                   [("0906", "1", y, q, f"{y}-0{q}-01", k, "other" if k != "tax" else "property_tax", a, 0.0, 0.0)
+                    for y, q, k, a in bills])          # stored as 'other', as bills fetched before this change are
+    db.commit()
+    out, meta = B.build(B.connect(path), "0906", B.load_positions(parcels), today=date(2026, 10, 27))
+    r = out[pin]
+    assert r["abatement_charges"]["2020"] == 4 * (2100 + 110)
+    assert r["tax"]["2020"] == 740 + 4 * (2100 + 110)                  # land tax plus what was paid instead
+    assert r["change"] is not None and r["change_5y"] is not None       # real payments: comparable over time
+    assert r["abatement"] == {"status": "ended", "year": 2026}
+    house = out["0906_100_1"]
+    assert not any(n["pin"] == pin for n in house["compare"]["list"])  # still kept out of other properties' pools
+
+
+def test_project_named_charges_count_on_abated_accounts():
+    # real labels from Jersey City bills: the charge is often named after the project
+    for kind in ("lhn-_gulls_cove", "700_grove_st", "rialto-capitol", "new_liberty", "true_up_adjustment"):
+        assert B.abatement_category(kind) == "abatement_charge", kind
+    for kind in ("water", "sewer", "sid_exchange_pl", "bad_check_fee_adjustment", "nsf_chk_reversal_adjustment",
+                 "transfer_to/from_qtr_adjustment", "payment_adjustment", "billing_adjustment"):
+        assert B.abatement_category(kind) == "other", kind
+    assert B.abatement_category("billing_adjustment", fully_abated=True) == "abatement_charge"
+    assert B.abatement_category("tax") == "property_tax"
+
+
+def test_project_named_charge_and_new_building(tmp_path):
+    import extract_bills
+    path, parcels = make_store(tmp_path)
+    db = extract_bills.connect(path)
+    rows = []
+    for acct, pin, lines in (
+        ("1", "0906_400_2_C0010", [("tax", 200.0), ("c138-county_chg", 100.0), ("lhn-_gulls_cove", 4000.0),
+                                   ("water", 300.0)]),
+        ("2", "0906_400_2_C0020", [("tax", 200.0)]),      # never a charge: building added, not an abatement ending
+    ):
+        db.execute("INSERT INTO accounts (county_district, account_id, pin, status, fetched_at) VALUES (?,?,?,?,?)",
+                   ("0906", acct, pin, "done", "2026-10-01"))
+        for y in range(2019, 2026):
+            rows += [("0906", acct, y, 1, f"{y}-02-01", k, "other", a, 0.0, 0.0) for k, a in lines]
+    db.executemany(f"INSERT INTO bills ({', '.join(extract_bills.BILL_COLUMNS)}) VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
+    db.commit()
+    out, meta = B.build(B.connect(path), "0906", B.load_positions(parcels), today=date(2026, 10, 27))
+    a = out["0906_400_2_C0010"]
+    assert a["abatement_charges"]["2020"] == 4100 and a["tax"]["2020"] == 4300   # water left out
+    assert a["abatement"] == {"status": "ended", "year": 2026}
+    b = out["0906_400_2_C0020"]
+    assert b["abatement"] is None and b["abatement_charges"] == {}

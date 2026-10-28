@@ -24,7 +24,7 @@ const pctLabel = (v: number) => `${v >= 0 ? "+" : ""}${Math.round(v * 100)}%`;
 
 // "Abatements only": every other property fades to a faint outline of the city, and abated ones are
 // colored by the law they're under (point column 5: 1 long-term, 2 five-year, 3 other, 4 ended recently).
-export const ABATEMENT_KINDS = ["Long-term", "5-year", "Other", "Ended recently"];
+export const ABATEMENT_KINDS = ["Long-term (40A:20)", "Under 40A:21", "Other", "Ended recently"];
 const ABATE_LIGHT = ["#6d4bb3", "#1b8a7a", "#c08a12", "#b5473a"];
 const ABATE_DARK = ["#a88bf0", "#4fd1bd", "#f0c04a", "#f07c6c"];
 
@@ -185,7 +185,7 @@ export default function MapView({ metric, label, abated = false }: { metric: Met
     if (i < 0) return setTip(null);
     const ch = points[i][METRIC_COL[metric]];
     setTip({ x: e.clientX - rect.left, y: e.clientY - rect.top,
-      text: abated ? (points[i][5] === 4 ? "Abatement ended recently" : `${ABATEMENT_KINDS[points[i][5] - 1]} abatement`)
+      text: abated ? (points[i][5] === 4 ? "Abatement ended recently" : `Abatement: ${ABATEMENT_KINDS[points[i][5] - 1]}`)
         : ch == null ? "No data for this view" : `${pctLabel(ch)} · ${label}` });
   };
   const onUp = (e: React.PointerEvent) => {

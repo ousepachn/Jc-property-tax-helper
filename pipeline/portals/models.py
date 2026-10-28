@@ -1,4 +1,5 @@
 """Normalized records produced by every billing-portal client."""
+import re
 from dataclasses import asdict, dataclass, field
 from datetime import date, timedelta
 
@@ -49,15 +50,21 @@ class Account:
 
 PROPERTY_TAX_KINDS = {"tax", "added", "omitted"}
 APPEAL_MARKERS = ("tax_court", "hudson_cty_bd", "county_bd", "assessor")
+# What an abated property pays instead of tax on its building (a PILOT). Jersey City bills it as
+# "Ab-<n> <project>" (e.g. 'ab-95_van_dam') plus the county's share and an admin fee ("C138-...").
+ABATEMENT_CHARGE = re.compile(r"^(ab|c138)[-_]|abatement|pilot|in_lieu|service_ch")
 
 
 def categorize(kind):
     """property_tax: regular/added/omitted bills. appeal_adjustment: tax court, county board or
-    assessor changes. other: payments bookkeeping, utilities, SID, hotel tax, fees."""
+    assessor changes. abatement_charge: the annual charge an abated property pays instead of tax.
+    other: payments bookkeeping, utilities, SID, hotel tax, fees."""
     if kind in PROPERTY_TAX_KINDS:
         return "property_tax"
     if any(m in kind for m in APPEAL_MARKERS):
         return "appeal_adjustment"
+    if ABATEMENT_CHARGE.search(kind):
+        return "abatement_charge"
     return "other"
 
 

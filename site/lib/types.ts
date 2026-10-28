@@ -69,6 +69,7 @@ export interface Property {
   q4_bill?: Record<string, number | null>;
   permits?: Permits;
   abatement?: Abatement | null;
+  abatement_charges?: Record<string, number | null>; // included in tax: what an abated property paid instead
   building_compare?: BuildingCompare | null;
   compare: {
     count: number;

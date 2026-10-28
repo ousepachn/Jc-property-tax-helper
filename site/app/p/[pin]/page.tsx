@@ -140,6 +140,12 @@ function History({ p, meta }: { p: Property; meta: Meta }) {
           after renovations or new construction raise a property&apos;s value, so part of the increase came from that work.
         </p>
       )}
+      {Object.values(p.abatement_charges ?? {}).some(Boolean) && (
+        <p className="small muted">
+          Includes the abatement charge billed in {Object.entries(p.abatement_charges ?? {}).filter(([, v]) => v).map(([y]) => y).join(", ")}:
+          what an abated property pays instead of tax on the building.
+        </p>
+      )}
       {p.tax_source === "estimated" && (
         <p className="small muted">
           Tax shown is estimated from each year&apos;s assessment and Jersey City&apos;s tax rate. Actual bills can differ
