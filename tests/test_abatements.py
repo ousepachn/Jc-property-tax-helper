@@ -65,7 +65,8 @@ def test_city_stats():
     assert (ab["properties"], ab["units"], ab["value"], ab["ending_soon"], ab["ended_recently"]) == (1, 1, 950, 1, 1)
 
 
-def make_store(tmp_path):
+def make_store(tmp_path, target=None):
+    """The synthetic county records; in a SQLite file, or in Postgres when target is a URL."""
     rows = []
     for i in range(1, 13):                                  # 12 ordinary 2-family houses, as in test_build_site
         rows.append(row("100", str(i), "", "2", str(2000 + 10 * i), 500000 + 1000 * i,
@@ -83,7 +84,7 @@ def make_store(tmp_path):
         r = row("400", "2", f"C00{u}0", "2", "750", 0)
         r[10] = "2005"
         rows.append(history(r, {2023: (40900, 0), 2024: (40900, 0), 2025: (40900, 0), 2026: (40900, 540200)}))
-    path = tmp_path / "t.sqlite"
+    path = target or tmp_path / "t.sqlite"
     db = fcr.open_db(path)
     fcr.load(db, "0906", fcr.read_export(export_zip(rows)), "2026-10-01", "2026-10-25T00:00:00+00:00")
     parcels = tmp_path / "parcels.csv"
@@ -125,10 +126,26 @@ def test_abatement_charges_are_categorized():
     assert categorize("cancel_hudson_cty_bd_adjustment") == "appeal_adjustment"
 
 
-def test_build_counts_abatement_charges_as_paid(tmp_path):
+def pg_target():
+    import os
+    import pytest
+    url = os.environ.get("TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("set TEST_DATABASE_URL to run Postgres tests")
+    import psycopg
+    with psycopg.connect(url, autocommit=True) as c:
+        c.execute("DROP SCHEMA IF EXISTS portal CASCADE")
+    return url
+
+
+def test_build_counts_abatement_charges_as_paid_postgres(tmp_path):
+    test_build_counts_abatement_charges_as_paid(tmp_path, pg_target())
+
+
+def test_build_counts_abatement_charges_as_paid(tmp_path, target=None):
     """300 Communipaw-style: land tax plus the abatement charge until 2025, then full tax."""
     import extract_bills
-    path, parcels = make_store(tmp_path)
+    path, parcels = make_store(tmp_path, target)
     db = extract_bills.connect(path)
     pin = "0906_400_2_C0010"
     db.execute("INSERT INTO accounts (county_district, account_id, pin, status, fetched_at) VALUES (?,?,?,?,?)",
