@@ -508,7 +508,9 @@ def main(argv=None):
         if args.json_out:
             write_json(out, meta, args.json_out)
         elif db.dialect == "postgres":
-            write_postgres(db, out, meta)
+            # a fresh connection to write: the build above holds the first one idle for minutes, and
+            # Neon suspends an idle database (closing its connections) after about 5 minutes
+            write_postgres(connect(args.db), out, meta)
         else:
             sys.exit("--json-out is required with a SQLite store")
         scored = defaultdict(int)

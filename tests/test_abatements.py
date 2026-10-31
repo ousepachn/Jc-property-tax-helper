@@ -204,3 +204,24 @@ def test_project_named_charge_and_new_building(tmp_path):
     assert a["abatement"] == {"status": "ended", "year": 2026}
     b = out["0906_400_2_C0020"]
     assert b["abatement"] is None and b["abatement_charges"] == {}
+
+
+def test_main_writes_on_a_fresh_connection_postgres(tmp_path, monkeypatch):
+    """Neon suspends an idle database mid-build and drops the connection (AdminShutdown)."""
+    import psycopg
+    url = pg_target()
+    path, parcels = make_store(tmp_path, url)
+    real_build = B.build
+
+    def build_then_drop(db, cd, positions, today=None):
+        out = real_build(db, cd, positions, today)
+        with psycopg.connect(url, autocommit=True) as c:                # what Neon's suspend does
+            c.execute("SELECT pg_terminate_backend(%s)", (db.conn.info.backend_pid,))
+        return out
+
+    monkeypatch.setattr(B, "build", build_then_drop)
+    with psycopg.connect(url, autocommit=True) as c:
+        c.execute("DROP SCHEMA IF EXISTS site CASCADE")
+    B.main(["--db", url, "--parcels", str(parcels)])
+    with psycopg.connect(url, autocommit=True) as c:
+        assert c.execute("SELECT COUNT(*) FROM site.properties").fetchone()[0] == 27
