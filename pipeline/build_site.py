@@ -461,35 +461,63 @@ def shard_of(pin, n=64):
     return h % n
 
 
+PROPERTY_COLUMNS = ("pin", "town", "address", "unit", "kind", "lat", "lon", "tax", "change", "appeal",
+                    "change_q4", "change_5y", "abatement", "data")
+
+
 def write_postgres(db, out, meta):
-    """Replace site.properties and site.meta in one transaction, so the site never sees a half-built table."""
+    """Replace site.properties and site.meta in one transaction, so the site never sees a half-built table.
+
+    The new rows go into a fresh table that then replaces the old one (drop + rename), rather than
+    DELETE + INSERT into the same table. A DELETE frees no disk: the old rows stay as dead space the
+    file never gives back, and a failed run leaves its half-written rows behind too. With a daily
+    rebuild that grew site.properties to about 3x its data and filled the 1 GB Neon Free plan. Dropping
+    the old table returns its space at once, so the table always holds exactly one clean copy."""
     # serialize first, so the transaction below never sits idle while Python works
     rows = []
     for r in out.values():
         s = summary_row(r)
         rows.append((s[0], meta["town"], *s[1:], json.dumps(r, separators=(",", ":"))))
-    db.execute(f"CREATE SCHEMA IF NOT EXISTS {SITE_SCHEMA}")
-    db.execute(f"""CREATE TABLE IF NOT EXISTS {SITE_SCHEMA}.properties (
-        pin TEXT PRIMARY KEY, town TEXT, address TEXT, unit TEXT, kind TEXT, lat DOUBLE PRECISION,
-        lon DOUBLE PRECISION, tax DOUBLE PRECISION, change DOUBLE PRECISION, appeal TEXT, data JSONB)""")
-    for col, typ in (("change_q4", "DOUBLE PRECISION"), ("change_5y", "DOUBLE PRECISION"), ("abatement", "SMALLINT")):
-        db.execute(f"ALTER TABLE {SITE_SCHEMA}.properties ADD COLUMN IF NOT EXISTS {col} {typ}")   # added later
-    db.execute(f"CREATE TABLE IF NOT EXISTS {SITE_SCHEMA}.meta (key TEXT PRIMARY KEY, value JSONB)")
+    S, cols = SITE_SCHEMA, ", ".join(PROPERTY_COLUMNS)
+    db.execute(f"CREATE SCHEMA IF NOT EXISTS {S}")
+    db.execute(f"CREATE TABLE IF NOT EXISTS {S}.meta (key TEXT PRIMARY KEY, value JSONB)")
     for role in ("anon", "authenticated"):
         if db.execute("SELECT 1 FROM pg_roles WHERE rolname = ?", (role,)).fetchone():
-            db.execute(f"REVOKE ALL ON SCHEMA {SITE_SCHEMA} FROM {role}")
-            db.execute(f"REVOKE ALL ON ALL TABLES IN SCHEMA {SITE_SCHEMA} FROM {role}")
+            db.execute(f"REVOKE ALL ON SCHEMA {S} FROM {role}")
+            db.execute(f"REVOKE ALL ON ALL TABLES IN SCHEMA {S} FROM {role}")
     db.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
     # the extension may already live in another schema (Neon: public) that isn't on our search_path
     trgm = db.execute("""SELECT n.nspname FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace
                          WHERE e.extname = 'pg_trgm'""").fetchone()[0]
-    db.execute(f"CREATE INDEX IF NOT EXISTS properties_address_trgm ON {SITE_SCHEMA}.properties "
-               f'USING gin (address "{trgm}".gin_trgm_ops)')
-    db.execute(f"DELETE FROM {SITE_SCHEMA}.properties WHERE town = ?", (meta["town"],))
-    db.executemany(f"""INSERT INTO {SITE_SCHEMA}.properties
-                       (pin, town, address, unit, kind, lat, lon, tax, change, appeal, change_q4, change_5y, abatement, data)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", rows)
-    db.execute(f"""INSERT INTO {SITE_SCHEMA}.meta VALUES (?, ?)
+
+    db.execute(f"DROP TABLE IF EXISTS {S}.properties_new")   # left by a run that died before committing
+    # toast_tuple_target: compress each row's JSON once it passes 512 bytes, not the default ~2 KB
+    db.execute(f"""CREATE TABLE {S}.properties_new (
+        pin TEXT, town TEXT, address TEXT, unit TEXT, kind TEXT, lat DOUBLE PRECISION, lon DOUBLE PRECISION,
+        tax DOUBLE PRECISION, change DOUBLE PRECISION, appeal TEXT, change_q4 DOUBLE PRECISION,
+        change_5y DOUBLE PRECISION, abatement SMALLINT, data JSONB) WITH (toast_tuple_target = 512)""")
+    old = db.execute("SELECT to_regclass(?)", (f"{S}.properties",)).fetchone()[0] is not None
+    if old:   # keep the other towns' rows
+        db.execute(f"INSERT INTO {S}.properties_new ({cols}) SELECT {cols} FROM {S}.properties WHERE town <> ?",
+                   (meta["town"],))
+    db.executemany(f"INSERT INTO {S}.properties_new ({cols}) VALUES ({', '.join('?' * len(PROPERTY_COLUMNS))})", rows)
+    # indexes after the load: faster, and built compact
+    db.execute(f"ALTER TABLE {S}.properties_new ADD CONSTRAINT properties_new_pkey PRIMARY KEY (pin)")
+    db.execute(f'CREATE INDEX properties_new_address_trgm ON {S}.properties_new USING gin (address "{trgm}".gin_trgm_ops)')
+    if old:
+        # the new table gets the old one's grants (the website's read-only role)
+        # (grantee 0 is PUBLIC; regrole::text quotes names that need it)
+        grants = db.execute("""SELECT DISTINCT a.grantee::regrole::text
+                               FROM pg_class c, aclexplode(c.relacl) a
+                               WHERE c.oid = to_regclass(?) AND a.privilege_type = 'SELECT'
+                                 AND a.grantee <> 0 AND a.grantee <> c.relowner""", (f"{S}.properties",)).fetchall()
+        for (grantee,) in grants:
+            db.execute(f"GRANT SELECT ON {S}.properties_new TO {grantee}")
+        db.execute(f"DROP TABLE {S}.properties")
+    db.execute(f"ALTER TABLE {S}.properties_new RENAME TO properties")
+    db.execute(f"ALTER INDEX {S}.properties_new_pkey RENAME TO properties_pkey")
+    db.execute(f"ALTER INDEX {S}.properties_new_address_trgm RENAME TO properties_address_trgm")
+    db.execute(f"""INSERT INTO {S}.meta VALUES (?, ?)
                    ON CONFLICT (key) DO UPDATE SET value = excluded.value""",
                (meta["county_district"], json.dumps(meta)))
     db.commit()
