@@ -11,9 +11,11 @@ export default async function Home() {
   return (
     <>
       <section className="home">
-        <h1 className="display">
-          What&apos;s happening to your <em>property tax?</em>
-        </h1>
+        <h1 className="display">What&apos;s happening to your property tax?</h1>
+        <p className="lede">
+          Look up any Jersey City property to see how its bill has changed, how it compares with similar homes nearby,
+          and whether an appeal could help.
+        </p>
         <Search autoFocus large />
         <p className="hint">Any Jersey City address. For a condo, add the unit: “77 Hudson St 1205”.</p>
       </section>
