@@ -9,7 +9,6 @@ export default function BuildingCompare({ b, address }: { b: BC; address: string
   return (
     <section className="card" aria-labelledby="h-building">
       <header>
-        <span className="eyebrow">Your building</span>
         <h2 id="h-building">
           {Math.abs(diff) < 0.03 ? "Assessed in line with your building"
             : `Assessed ${pct(Math.abs(diff)).replace("+", "")} ${diff > 0 ? "above" : "below"} ${basis}`}

@@ -121,7 +121,6 @@ function History({ p, meta }: { p: Property; meta: Meta }) {
   return (
     <section className="card" aria-labelledby="h-history">
       <header>
-        <span className="eyebrow">The trend</span>
         <h2 id="h-history">
           {p.change == null
             ? "Tax history"
@@ -130,9 +129,8 @@ function History({ p, meta }: { p: Property; meta: Meta }) {
       </header>
       <TaxChart years={years} yours={yours} theirs={theirs} flags={flags} />
       <div className="legend">
-        <span><i style={{ background: "var(--you)" }} />This property</span>
-        {p.compare.count > 0 && <span><i style={{ background: "var(--them)" }} />Median of {p.compare.count} similar nearby</span>}
-        {Object.keys(flags).length > 0 && <span>Large dot: {[...new Set(Object.values(flags))].join(", ")} that year</span>}
+        {p.compare.count > 0 && <span>Gray line: median of {p.compare.count} similar properties nearby</span>}
+        {Object.keys(flags).length > 0 && <span>Dotted line: {[...new Set(Object.values(flags))].join(", ")} that year</span>}
       </div>
       {p.added_assessment_years.length > 0 && (
         <p className="note">
@@ -182,7 +180,7 @@ function Compare({ p, meta }: { p: Property; meta: Meta }) {
   if (!c.count) {
     return (
       <section className="card" aria-labelledby="h-compare">
-        <header><span className="eyebrow">Neighbors</span><h2 id="h-compare">No comparison for this property</h2></header>
+        <header><h2 id="h-compare">No comparison for this property</h2></header>
         <p className="muted">{c.reason}</p>
       </section>
     );
@@ -198,7 +196,6 @@ function Compare({ p, meta }: { p: Property; meta: Meta }) {
   return (
     <section className="card" aria-labelledby="h-compare">
       <header>
-        <span className="eyebrow">Neighbors</span>
         <h2 id="h-compare">Compared with {c.count} similar {kindPlural(p.kind)} nearby</h2>
         <p className="small muted">
           Same type, within ±{band}% of this property&apos;s floor area, built in the same era, within {c.radius_mi} mile.

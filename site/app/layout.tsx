@@ -1,11 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Public_Sans } from "next/font/google";
+import { Libre_Franklin, Source_Serif_4 } from "next/font/google";
 import Link from "next/link";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
-const publicSans = Public_Sans({ subsets: ["latin"], variable: "--font-public-sans", display: "swap" });
+// Editorial pairing: a serif for headlines and prose, a Franklin-style sans for figures and interface.
+const sans = Libre_Franklin({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
+const serif = Source_Serif_4({ subsets: ["latin"], variable: "--font-serif", display: "swap" });
 
 export const metadata: Metadata = {
   title: { default: "Jersey City Tax Check", template: "%s · Jersey City Tax Check" },
@@ -17,21 +19,23 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, view
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={publicSans.variable}>
+    <html lang="en" className={`${sans.variable} ${serif.variable}`}>
       <body>
-        <div className="top">
+        <header className="top">
           <div className="wrap">
-            <Link href="/" className="brand">
-              <span className="mark" aria-hidden="true">$</span>
-              Jersey City Tax Check
-            </Link>
-            <nav className="nav" aria-label="Main">
-              <Link href="/appeal">Appeal guide</Link>
-              <Link href="/feedback">Feedback</Link>
-              {process.env.OWNER_ACCOUNTS === "on" && <Link href="/account">Owner sign-in</Link>}
-            </nav>
+            <div className="topline">
+              <span>Property tax, from public records</span>
+              <nav className="nav" aria-label="Main">
+                <Link href="/appeal">Appeal guide</Link>
+                <Link href="/feedback">Feedback</Link>
+                {process.env.OWNER_ACCOUNTS === "on" && <Link href="/account">Owner sign-in</Link>}
+              </nav>
+            </div>
+            <div className="masthead">
+              <Link href="/" className="brand">Jersey City Tax Check</Link>
+            </div>
           </div>
-        </div>
+        </header>
         <main className="wrap">{children}</main>
         <footer>
           <div className="wrap">
