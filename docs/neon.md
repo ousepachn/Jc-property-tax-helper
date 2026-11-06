@@ -102,7 +102,7 @@ The Free plan allows 1 GB of Postgres per project; past it, writes are blocked (
 
 | What | Size | Notes |
 |---|---|---|
-| `site` (Jersey City) | 108 MB | rebuilt daily; deleted rows are reused, so it can sit near 2× (about 220 MB) |
+| `site` (Jersey City) | 108 MB | rebuilt daily into a fresh table that replaces the old one, so it holds one copy; needs room for a second copy while the build runs |
 | `neon_auth` | under 1 MB | grows with owner accounts |
 | `portal` | under 517 MB | Supabase's figure includes dead space from the slimmed bills table; the copy rewrites it compactly. The copy job prints the real number |
 | **Expected total** | **about 650–750 MB** | 250+ MB of headroom; bills grow roughly a few % per year |

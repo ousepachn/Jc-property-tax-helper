@@ -95,9 +95,25 @@ def test_write_postgres_replaces_atomically(tmp_path):
     out, meta = B.build(B.connect(path), "0906", B.load_positions(parcels))
     with psycopg.connect(pg, autocommit=True) as c:
         c.execute(f"DROP SCHEMA IF EXISTS {B.SITE_SCHEMA} CASCADE")
-    for _ in range(2):                                            # second run replaces, no duplicates
-        B.write_postgres(B.connect(pg), out, meta)
     with psycopg.connect(pg, autocommit=True) as c:
+        if not c.execute("SELECT 1 FROM pg_roles WHERE rolname = 'site_reader_test'").fetchone():
+            c.execute("CREATE ROLE site_reader_test")
+    B.write_postgres(B.connect(pg), out, meta)
+    with psycopg.connect(pg, autocommit=True) as c:
+        c.execute("GRANT USAGE ON SCHEMA site TO site_reader_test")
+        c.execute("GRANT SELECT ON site.properties TO site_reader_test")
+        c.execute("INSERT INTO site.properties (pin, town) VALUES ('9999_1_1', 'Hoboken')")   # another town
+        c.execute("CREATE TABLE site.properties_new (x int)")                               # left by a crashed run
+    B.write_postgres(B.connect(pg), out, meta)                    # second run replaces, no duplicates
+    with psycopg.connect(pg, autocommit=True) as c:
+        assert c.execute("SELECT town, COUNT(*) FROM site.properties GROUP BY town ORDER BY town").fetchall() == [
+            ("Hoboken", 1), ("Jersey City", 13)]
+        c.execute("DELETE FROM site.properties WHERE town = 'Hoboken'")
+        # the website's read-only role keeps its access to the replaced table
+        assert c.execute("SELECT has_table_privilege('site_reader_test', 'site.properties', 'SELECT')").fetchone()[0]
+        assert c.execute("SELECT to_regclass('site.properties_new')").fetchone()[0] is None
+        assert {r[0] for r in c.execute("SELECT indexname FROM pg_indexes WHERE schemaname = 'site' "
+                                        "AND tablename = 'properties'")} == {"properties_pkey", "properties_address_trgm"}
         assert c.execute("SELECT COUNT(*) FROM site.properties").fetchone()[0] == 13
         row = c.execute("SELECT address, kind, data->'compare'->>'count' FROM site.properties "
                         "WHERE pin = '0906_100_1'").fetchone()
