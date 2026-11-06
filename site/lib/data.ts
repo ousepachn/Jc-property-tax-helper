@@ -69,8 +69,16 @@ export function unitKey(u: string) {
   return u.toUpperCase().replace(/^C(?=\w{4})/, "").replace(/[^A-Z0-9]/g, "").replace(/^0+(?=\w)/, "");
 }
 
+// The forms a typed unit may take on the roll. Jersey City numbers many penthouses 9001, 9002 ... (PH1, PH2)
+// and, in towers with several penthouse levels, 90 + level + unit: 88 Morgan St's PH6-3 is C9063. Other
+// buildings write them out (C0PH1 -> PH1), so a typed PH unit matches either form.
+export function unitForms(u: string) {
+  const ph = u.match(/^PH(\d{1,3})$/);
+  return ph ? [u, `9${ph[1].padStart(3, "0")}`] : [u];
+}
+
 const UNIT_WORD = String.raw`(?:#|\b(?:UNIT|APT|APARTMENT|STE|SUITE)\b\.?)`;
-const UNIT_MARK = new RegExp(String.raw`(?:,\s*${UNIT_WORD}?|${UNIT_WORD})\s*([A-Z0-9-]*)\s*$`);
+const UNIT_MARK = new RegExp(String.raw`(?:,\s*${UNIT_WORD}?|${UNIT_WORD})\s*([A-Z0-9][A-Z0-9 -]*|)\s*$`);   // "PH 6-3" is one unit
 
 export function parseQuery(q: string): ParsedQuery {
   let s = q.toUpperCase().replace(/\bJERSEY CITY\b|\bNJ\b|\b07\d{3}\b/g, " ").trim().replace(/,$/, "");
@@ -166,17 +174,16 @@ async function searchUnits(p: ParsedQuery): Promise<SearchHit[]> {
   if (sql) {
     const params: unknown[] = [];
     const where = termsSql(p.terms, params);
-    params.push(`${u}%`);
-    const like = params.length;
-    params.push(u);
-    const exact = params.length;
+    const forms = unitForms(u);
+    const like = forms.map((f) => { params.push(`${f}%`); return `${UNIT_SQL} LIKE $${params.length}`; }).join(" OR ");
+    const exact = forms.map((f) => { params.push(f); return `${UNIT_SQL} = $${params.length}`; }).join(" OR ");
     params.push(`${p.terms[0][0]} %`);
     const starts = params.length;
     params.push(SEARCH_LIMIT);
     const rows = await sql.query(
       `SELECT pin, address, unit, kind FROM site.properties
-       WHERE ${where} AND unit IS NOT NULL AND ${UNIT_SQL} LIKE $${like}
-       ORDER BY (upper(address) LIKE $${starts}) DESC, length(address), address, (${UNIT_SQL} = $${exact}) DESC,
+       WHERE ${where} AND unit IS NOT NULL AND (${like})
+       ORDER BY (upper(address) LIKE $${starts}) DESC, length(address), address, (${exact}) DESC,
                 length(${UNIT_SQL}), ${UNIT_SQL}
        LIMIT $${params.length}`,
       params,
@@ -184,17 +191,18 @@ async function searchUnits(p: ParsedQuery): Promise<SearchHit[]> {
     return rows as SearchHit[];
   }
   const idx = await localIndex();
+  const forms = unitForms(u);
   const hits: SearchHit[] = [];
   for (const r of idx.rows) {
     const unit = (r[2] as string) ?? null;
-    if (unit && matches(String(r[1]), p.terms) && unitKey(unit).startsWith(u)) {
+    if (unit && matches(String(r[1]), p.terms) && forms.some((f) => unitKey(unit).startsWith(f))) {
       hits.push({ pin: String(r[0]), address: String(r[1]), unit, kind: (r[3] as string) ?? null });
     }
   }
   const k = (h: SearchHit) => unitKey(h.unit ?? "");
   hits.sort((a, b) => Number(startsWithNumber(b.address, p.terms)) - Number(startsWithNumber(a.address, p.terms)) ||
     a.address.length - b.address.length || a.address.localeCompare(b.address) ||
-    Number(k(b) === u) - Number(k(a) === u) || k(a).length - k(b).length || k(a).localeCompare(k(b)));
+    Number(forms.includes(k(b))) - Number(forms.includes(k(a))) || k(a).length - k(b).length || k(a).localeCompare(k(b)));
   return hits.slice(0, SEARCH_LIMIT);
 }
 

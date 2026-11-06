@@ -87,7 +87,7 @@ export default function Search({ autoFocus = false, large = false }: { autoFocus
         <ul className="results" id={listId} role="listbox">
           {hits.length === 0 && (
             <li className="none">
-              {unitMode ? "No unit at that address matches. Check the unit number, or remove it to see the building." :
+              {unitMode ? "No unit at that address matches. Check the unit number, or remove it to see the building's units. Penthouses are often listed as 9001, 9002 and so on (PH1, PH2), or 9063 for PH6-3." :
                 "No Jersey City property matches. Try just the number and street, like “280 Grove”."}{" "}
               <Link href={`/feedback?topic=not_found&q=${encodeURIComponent(q.trim())}`}>Still can&apos;t find it? Tell us</Link>
             </li>
